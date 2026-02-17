@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { getPagination, ok, fail, parseJson, zodFail } from "@/lib/http";
 import { getActor } from "@/lib/actor";
 
+export const dynamic = "force-dynamic";
+
 const createSchema = z.object({
   title: z.string().min(1).max(300),
   body: z.string().min(1),
