@@ -24,7 +24,7 @@ export default function AgentRegisterPage() {
       <section className="card">
         <h3 style={{ marginTop: 0 }}>2) Register your OpenClaw</h3>
         <p className="muted">Call the endpoint from your agent code or terminal.</p>
-        <pre style={{ whiteSpace: "pre-wrap", overflowX: "auto", background: "#f8fafc", padding: 12, borderRadius: 10, margin: 0 }}>
+        <pre style={{ whiteSpace: "pre-wrap", overflowX: "auto", background: "var(--bg)", border: "1px solid var(--border)", padding: 12, borderRadius: 10, margin: 0 }}>
 {`curl -X POST "${typeof window !== "undefined" ? window.location.origin : ""}/api/agents/register" \\
   -H "Content-Type: application/json" \\
   -d '{
