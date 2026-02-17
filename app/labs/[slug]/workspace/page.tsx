@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
@@ -13,7 +13,7 @@ import {
   CircleCheck, CircleX, CircleDot, CircleMinus,
   MessageSquareMore, Vote, BookOpen, Microscope, FlaskConical,
   ExternalLink, ListTodo, TrendingUp, MessageCircle, Send,
-  File, Download, X,
+  File, Download, X, ArrowLeft,
 } from "lucide-react";
 
 type WorkspaceTab = "overview" | "agents" | "discussion" | "docs";
@@ -57,18 +57,13 @@ export default function LabWorkspacePage() {
 
   return (
     <div className="grid" style={{ gap: 12 }}>
-      <header className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Lab Workspace</h1>
-          <p className="muted" style={{ marginBottom: 0 }}>Slug: {slug}</p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="tabs" style={{ margin: 0 }}>
+          {(["overview", "agents", "discussion", "docs"] as WorkspaceTab[]).map((entry) => (
+            <button key={entry} className={`tab ${tab === entry ? "active" : ""}`} onClick={() => setTab(entry)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{TAB_ICONS[entry]}{entry[0].toUpperCase() + entry.slice(1)}</button>
+          ))}
         </div>
-        <Link className="btn" href="/forum">Back to forum</Link>
-      </header>
-
-      <div className="tabs">
-        {(["overview", "agents", "discussion", "docs"] as WorkspaceTab[]).map((entry) => (
-          <button key={entry} className={`tab ${tab === entry ? "active" : ""}`} onClick={() => setTab(entry)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{TAB_ICONS[entry]}{entry[0].toUpperCase() + entry.slice(1)}</button>
-        ))}
+        <span className="muted" style={{ fontSize: 13 }}>{slug}</span>
       </div>
 
       {tab === "overview" && <OverviewTab slug={slug} />}
@@ -116,9 +111,9 @@ function OverviewTab({ slug }: { slug: string }) {
   return (
     <div className="grid" style={{ gap: 12 }}>
       <section className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ marginTop: 0, marginBottom: 4 }}>Overview</h2>
-          <span className="muted" style={{ fontSize: 13 }}>polling: 10s</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Overview</h2>
+          <Link className="btn" href="/forum" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}><ArrowLeft size={14} /> Back to forum</Link>
         </div>
 
         <div className="card" style={{ background: "#ecfeff", borderColor: "#a5f3fc", minHeight: 120, position: "relative", overflow: "hidden" }}>
@@ -542,6 +537,38 @@ function Metric({ label, value, icon, smallValue }: { label: string; value: stri
   );
 }
 
+const AUTHOR_PALETTES = [
+  { bg: "#fef7f0", border: "#f97316", avatar: "#fff7ed" }, // warm orange
+  { bg: "#f0f7fe", border: "#3b82f6", avatar: "#eff6ff" }, // soft blue
+  { bg: "#f0fef4", border: "#16a34a", avatar: "#f0fdf4" }, // mint green
+  { bg: "#fdf0fe", border: "#d946ef", avatar: "#fdf4ff" }, // soft pink
+  { bg: "#fefef0", border: "#ca8a04", avatar: "#fefce8" }, // soft gold
+  { bg: "#f4f0fe", border: "#8b5cf6", avatar: "#f5f3ff" }, // lavender
+  { bg: "#f0fefe", border: "#0891b2", avatar: "#ecfeff" }, // cyan
+  { bg: "#fef0f0", border: "#ef4444", avatar: "#fef2f2" }, // rose
+];
+
+function authorColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+  return AUTHOR_PALETTES[Math.abs(hash) % AUTHOR_PALETTES.length];
+}
+
+function AuthorAvatar({ name }: { name: string }) {
+  const palette = authorColor(name);
+  const initials = name.split(/[\s-]+/).map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      width: 28, height: 28, borderRadius: "50%",
+      background: palette.avatar, border: `2px solid ${palette.border}`,
+      fontSize: 11, fontWeight: 700, color: palette.border, flexShrink: 0,
+    }}>
+      {initials}
+    </span>
+  );
+}
+
 function DiscussionTab({ slug }: { slug: string }) {
   const { user } = useCurrentUser();
   const [comments, setComments] = useState<any[]>([]);
@@ -593,36 +620,66 @@ function DiscussionTab({ slug }: { slug: string }) {
     load();
   };
 
-  return (
-    <section className="card">
-      <AuthPromptModal open={needsAuth} onClose={() => setNeedsAuth(false)} />
-      <h2 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><MessageSquare size={20} /> Discussion</h2>
-      <p className="muted">Markdown messages + mixed activity timeline (polling 5s).</p>
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [timeline.length]);
 
-      <div className="card" style={{ maxHeight: "64vh", overflow: "auto" }}>
+  return (
+    <section className="card" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 170px)", minHeight: 300, padding: 0, overflow: "hidden" }}>
+      <AuthPromptModal open={needsAuth} onClose={() => setNeedsAuth(false)} />
+
+      {/* Header */}
+      <div style={{ padding: "14px 18px 10px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+        <h2 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8, fontSize: 18 }}><MessageSquare size={20} /> Discussion</h2>
+      </div>
+
+      {/* Messages — scroll up for older */}
+      <div ref={scrollRef} style={{ flex: 1, overflow: "auto", padding: "12px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
         {timeline.map((entry, idx) => {
           if (entry.kind === "activity") {
+            const agentName = entry.item.agent_name || "";
             return (
-              <div key={`a-${idx}`} style={{ padding: "8px 0", borderBottom: "1px dashed #e5e7eb" }}>
-                <p style={{ margin: 0, fontSize: 12, color: "#6b7280", display: "flex", alignItems: "center", gap: 4 }}><Activity size={14} /> {entry.item.activity_type} • {new Date(entry.item.created_at).toLocaleTimeString()}</p>
-                <p style={{ margin: "4px 0 0" }}>{entry.item.message}</p>
+              <div key={`a-${idx}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "2px 0" }}>
+                <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+                <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
+                  <Activity size={12} />
+                  {agentName && <strong>{agentName}</strong>}
+                  {entry.item.activity_type.replace(/_/g, " ")} — {new Date(entry.item.created_at).toLocaleTimeString()}
+                </span>
+                <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
               </div>
             );
           }
+
+          const palette = authorColor(entry.item.author_name);
           return (
-            <div key={`c-${idx}`} style={{ padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
-              <p style={{ margin: 0, fontSize: 12, color: "#6b7280", display: "flex", alignItems: "center", gap: 4 }}><MessageCircle size={14} /> {entry.item.author_name} • {new Date(entry.item.created_at).toLocaleTimeString()}</p>
-              <div style={{ marginTop: 6 }}><ReactMarkdown>{entry.item.body}</ReactMarkdown></div>
+            <div key={`c-${idx}`} style={{
+              background: palette.bg,
+              borderLeft: `3px solid ${palette.border}`,
+              borderRadius: 8,
+              padding: "10px 14px",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <AuthorAvatar name={entry.item.author_name} />
+                <strong style={{ fontSize: 13, color: palette.border }}>{entry.item.author_name}</strong>
+                <span style={{ fontSize: 11, color: "#9ca3af" }}>{new Date(entry.item.created_at).toLocaleTimeString()}</span>
+              </div>
+              <div className="discussion-body"><ReactMarkdown>{entry.item.body}</ReactMarkdown></div>
             </div>
           );
         })}
       </div>
 
-      <form className="grid" onSubmit={submit} style={{ marginTop: 10 }}>
-        <textarea className="textarea" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Write markdown message..." />
-        {error && <p style={{ color: "#dc2626", margin: 0 }}>{error}</p>}
-        <button className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Send size={14} /> Post message</button>
-      </form>
+      {/* Compose — pinned bottom */}
+      <div style={{ padding: "10px 18px 14px", borderTop: "1px solid var(--border)", flexShrink: 0 }}>
+        {error && <p style={{ color: "#dc2626", margin: "0 0 6px", fontSize: 13 }}>{error}</p>}
+        <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <textarea className="textarea" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Write a message..." rows={2} style={{ flex: 1, resize: "none", margin: 0 }} />
+          <button className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, height: 38 }}><Send size={14} /> Send</button>
+        </form>
+      </div>
     </section>
   );
 }
@@ -649,11 +706,8 @@ function DocsTab({ slug }: { slug: string }) {
         setContent("");
         return;
       }
-      const urlRes = await fetch(`/api/labs/${slug}/docs/${selected.id}/url?disposition=inline`);
-      if (!urlRes.ok) return;
-      const { url } = await urlRes.json();
-      const textRes = await fetch(url);
-      if (textRes.ok) setContent(await textRes.text());
+      const res = await fetch(`/api/labs/${slug}/docs/${selected.id}/content`);
+      if (res.ok) setContent(await res.text());
     };
     loadContent();
   }, [slug, selected]);

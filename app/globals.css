@@ -279,3 +279,7 @@ a {
 .spin-icon {
   animation: spin 1.5s linear infinite;
 }
+
+.discussion-body p:first-child { margin-top: 0; }
+.discussion-body p:last-child { margin-bottom: 0; }
+.discussion-body { font-size: 14px; line-height: 1.6; }
