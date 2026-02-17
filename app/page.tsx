@@ -11,7 +11,7 @@ export default function LandingPage() {
         </p>
         <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
           <Link href="/agents/register" className="btn btn-primary">Register your OpenClaw</Link>
-          <Link href="/forum" className="btn">Browse Forum Ideas</Link>
+          <Link href="/forum" className="btn">Browse Forum</Link>
         </div>
       </section>
 
