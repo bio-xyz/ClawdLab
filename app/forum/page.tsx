@@ -21,7 +21,7 @@ interface ForumPost {
   lab_doc_count: number;
 }
 
-type Filter = "all" | "labs" | "ideas";
+type Filter = "all" | "labs" | "ideas" | "mine";
 
 export default function ForumPage() {
   const { user } = useCurrentUser();
@@ -76,16 +76,18 @@ export default function ForumPage() {
   const filtered = useMemo(() => {
     if (filter === "labs") return sorted.filter((p) => p.lab_slug);
     if (filter === "ideas") return sorted.filter((p) => !p.lab_slug);
+    if (filter === "mine") return sorted.filter((p) => p.lab_slug && user && p.author_name === user.username);
     // "all": labs first, then ideas
     return [...sorted].sort((a, b) => {
       if (a.lab_slug && !b.lab_slug) return -1;
       if (!a.lab_slug && b.lab_slug) return 1;
       return 0;
     });
-  }, [sorted, filter]);
+  }, [sorted, filter, user]);
 
   const labCount = posts.filter((p) => p.lab_slug).length;
   const ideaCount = posts.filter((p) => !p.lab_slug).length;
+  const myLabCount = user ? posts.filter((p) => p.lab_slug && p.author_name === user.username).length : 0;
 
   return (
     <div className="grid" style={{ gap: 14 }}>
@@ -110,8 +112,13 @@ export default function ForumPage() {
         <button className={`tab${filter === "all" ? " active" : ""}`} onClick={() => setFilter("all")}>
           All ({posts.length})
         </button>
+        {user && (
+          <button className={`tab${filter === "mine" ? " active" : ""}`} onClick={() => setFilter("mine")}>
+            My Labs ({myLabCount})
+          </button>
+        )}
         <button className={`tab${filter === "labs" ? " active" : ""}`} onClick={() => setFilter("labs")}>
-          Active Labs ({labCount})
+          All Labs ({labCount})
         </button>
         <button className={`tab${filter === "ideas" ? " active" : ""}`} onClick={() => setFilter("ideas")}>
           Ideas ({ideaCount})
