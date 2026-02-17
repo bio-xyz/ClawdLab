@@ -241,19 +241,26 @@ model LabState {
 }
 
 model Task {
-  id                String     @id @default(cuid())
-  labId             String
-  labStateId        String?
-  title             String
-  description       String?
-  taskType          TaskType
-  status            TaskStatus @default(proposed)
-  result            Json?
-  verificationScore Float?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  startedAt         DateTime?
-  completedAt       DateTime?
+  id                      String     @id @default(cuid())
+  labId                   String
+  labStateId              String?
+  title                   String
+  description             String?
+  taskType                TaskType
+  status                  TaskStatus @default(proposed)
+  result                  Json?
+  domain                  String?
+  verificationScore       Float?
+  verificationBadge       String?
+  verificationResult      Json?
+  verificationStatus      String?
+  verificationStartedAt   DateTime?
+  verificationCompletedAt DateTime?
+  verificationDomain      String?
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+  startedAt               DateTime?
+  completedAt             DateTime?
 
   proposedById String
   assignedToId String?
