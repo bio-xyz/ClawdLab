@@ -6,8 +6,24 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { useCurrentUser } from "@/components/useCurrentUser";
+import {
+  LayoutDashboard, Bot, MessageSquare, FileText,
+  Users, ListPlus, Loader, Eye, CheckCircle, Clock,
+  Lightbulb, Target, BarChart3, Award, Activity,
+  CircleCheck, CircleX, CircleDot, CircleMinus,
+  MessageSquareMore, Vote, BookOpen, Microscope, FlaskConical,
+  ExternalLink, ListTodo, TrendingUp, MessageCircle, Send,
+  File, Download, X,
+} from "lucide-react";
 
 type WorkspaceTab = "overview" | "agents" | "discussion" | "docs";
+
+const TAB_ICONS: Record<WorkspaceTab, React.ReactNode> = {
+  overview: <LayoutDashboard size={16} />,
+  agents: <Bot size={16} />,
+  discussion: <MessageSquare size={16} />,
+  docs: <FileText size={16} />,
+};
 
 function usePolling(callback: () => void | Promise<void>, intervalMs: number, deps: unknown[] = []) {
   useEffect(() => {
@@ -51,7 +67,7 @@ export default function LabWorkspacePage() {
 
       <div className="tabs">
         {(["overview", "agents", "discussion", "docs"] as WorkspaceTab[]).map((entry) => (
-          <button key={entry} className={`tab ${tab === entry ? "active" : ""}`} onClick={() => setTab(entry)}>{entry[0].toUpperCase() + entry.slice(1)}</button>
+          <button key={entry} className={`tab ${tab === entry ? "active" : ""}`} onClick={() => setTab(entry)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{TAB_ICONS[entry]}{entry[0].toUpperCase() + entry.slice(1)}</button>
         ))}
       </div>
 
@@ -129,13 +145,13 @@ function OverviewTab({ slug }: { slug: string }) {
       </section>
 
       <section className="metric-grid">
-        <div className="metric"><div className="metric-label">Members online</div><div className="metric-value">{onlineCount}</div></div>
-        <div className="metric"><div className="metric-label">Tasks proposed</div><div className="metric-value">{stats?.proposed || 0}</div></div>
-        <div className="metric"><div className="metric-label">Tasks in progress</div><div className="metric-value">{stats?.in_progress || 0}</div></div>
-        <div className="metric"><div className="metric-label">Tasks review</div><div className="metric-value">{(stats?.completed || 0) + (stats?.critique_period || 0) + (stats?.voting || 0)}</div></div>
-        <div className="metric"><div className="metric-label">Tasks resolved</div><div className="metric-value">{(stats?.accepted || 0) + (stats?.rejected || 0) + (stats?.superseded || 0)}</div></div>
-        <div className="metric"><div className="metric-label">Docs count</div><div className="metric-value">{docs.length}</div></div>
-        <div className="metric"><div className="metric-label">Last activity</div><div className="metric-value" style={{ fontSize: 13 }}>{activity[0]?.created_at ? new Date(activity[0].created_at).toLocaleString() : "—"}</div></div>
+        <Metric icon={<Users size={14} />} label="Members online" value={onlineCount} />
+        <Metric icon={<ListPlus size={14} />} label="Tasks proposed" value={stats?.proposed || 0} />
+        <Metric icon={<Loader size={14} />} label="Tasks in progress" value={stats?.in_progress || 0} />
+        <Metric icon={<Eye size={14} />} label="Tasks review" value={(stats?.completed || 0) + (stats?.critique_period || 0) + (stats?.voting || 0)} />
+        <Metric icon={<CheckCircle size={14} />} label="Tasks resolved" value={(stats?.accepted || 0) + (stats?.rejected || 0) + (stats?.superseded || 0)} />
+        <Metric icon={<FileText size={14} />} label="Docs count" value={docs.length} />
+        <Metric icon={<Clock size={14} />} label="Last activity" value={activity[0]?.created_at ? new Date(activity[0].created_at).toLocaleString() : "—"} smallValue />
       </section>
 
       <LabStateSection labStates={labStates} stateTasks={stateTasks} activity={activity} />
@@ -220,11 +236,11 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
 
       {/* Inner tabs: Overview / Activity */}
       <div className="tabs" style={{ marginBottom: 0 }}>
-        <button className={`tab${innerTab === "overview" ? " active" : ""}`} onClick={() => setInnerTab("overview")}>
-          Overview
+        <button className={`tab${innerTab === "overview" ? " active" : ""}`} onClick={() => setInnerTab("overview")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <LayoutDashboard size={16} /> Overview
         </button>
-        <button className={`tab${innerTab === "activity" ? " active" : ""}`} onClick={() => setInnerTab("activity")}>
-          Recent Activity
+        <button className={`tab${innerTab === "activity" ? " active" : ""}`} onClick={() => setInnerTab("activity")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Activity size={16} /> Recent Activity
         </button>
       </div>
 
@@ -250,7 +266,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
           {/* Hypothesis */}
           {current?.hypothesis && (
             <div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Hypothesis</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Lightbulb size={14} /> Hypothesis</div>
               <p style={{ margin: 0, fontStyle: "italic" }}>{current.hypothesis}</p>
             </div>
           )}
@@ -258,7 +274,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
           {/* Objectives */}
           {current?.objectives && (current.objectives as string[]).length > 0 && (
             <div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Objectives</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Target size={14} /> Objectives</div>
               <ul style={{ margin: 0, paddingLeft: 20 }}>
                 {(current.objectives as string[]).map((obj: string, i: number) => (
                   <li key={i} style={{ marginBottom: 4 }}>{obj}</li>
@@ -270,7 +286,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
           {/* Task progress for active state */}
           {isViewingActive && counts && counts.total > 0 && (
             <div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Task Progress</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><BarChart3 size={14} /> Task Progress</div>
               <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: "var(--border)" }}>
                 {counts.resolved > 0 && <div style={{ width: `${(counts.resolved / counts.total) * 100}%`, background: "#16a34a" }} />}
                 {counts.inReview > 0 && <div style={{ width: `${(counts.inReview / counts.total) * 100}%`, background: "#f59e0b" }} />}
@@ -288,7 +304,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
           {/* Conclusion for concluded states */}
           {current?.conclusion_summary && (
             <div style={{ background: colors.bg, borderRadius: 10, padding: 12 }}>
-              <div style={{ fontSize: 12, color: colors.text, fontWeight: 600, marginBottom: 4 }}>Conclusion</div>
+              <div style={{ fontSize: 12, color: colors.text, fontWeight: 600, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Award size={14} /> Conclusion</div>
               <p style={{ margin: 0 }}>{current.conclusion_summary}</p>
             </div>
           )}
@@ -311,6 +327,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
                   <div key={idx} style={{ padding: "10px 0", borderBottom: idx < Math.min(activity.length, 5) - 1 ? "1px solid var(--border)" : "none" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <Activity size={14} style={{ color: "var(--muted)", flexShrink: 0 }} />
                         {agentName && <strong style={{ fontSize: 13 }}>{agentName}</strong>}
                         <span style={{ fontSize: 11, color: "var(--muted)" }}>{item.activity_type.replace(/_/g, " ")}</span>
                       </div>
@@ -356,7 +373,7 @@ function TaskResultDialog({ task, onClose }: { task: any; onClose: () => void })
       <div className="card" style={{ maxWidth: 800, width: "100%", maxHeight: "80vh", overflow: "auto", padding: 24 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h3 style={{ margin: 0 }}>{task.title}</h3>
-          <button className="btn" onClick={onClose} style={{ flexShrink: 0 }}>Close</button>
+          <button className="btn" onClick={onClose} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><X size={14} /> Close</button>
         </div>
         <p className="muted" style={{ marginTop: 0 }}>status: {task.status} • type: {task.task_type}</p>
         <ReactMarkdown>{resultToMarkdown(task.result)}</ReactMarkdown>
@@ -428,11 +445,11 @@ function AgentsTab({ slug }: { slug: string }) {
     <div className="grid" style={{ gridTemplateColumns: "320px 1fr", gap: 12 }}>
       <aside className="card" style={{ maxHeight: 760, overflow: "auto" }}>
         <h3 style={{ marginTop: 0 }}>Agents</h3>
-        <button className="btn" style={{ width: "100%", marginBottom: 10 }} onClick={() => setSelectedAgentId(null)}>All agents</button>
+        <button className="btn" style={{ width: "100%", marginBottom: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }} onClick={() => setSelectedAgentId(null)}><Users size={14} /> All agents</button>
         <div className="grid">
           {members.map((member) => (
             <button key={member.agent_id} className="card" style={{ textAlign: "left", cursor: "pointer", borderColor: selectedAgentId === member.agent_id ? "#0f766e" : "#e5e7eb" }} onClick={() => setSelectedAgentId(member.agent_id)}>
-              <strong>{member.display_name}</strong>
+              <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><Bot size={14} /> {member.display_name}</strong>
               <p className="muted" style={{ marginBottom: 0 }}>role: {member.role}</p>
             </button>
           ))}
@@ -444,11 +461,11 @@ function AgentsTab({ slug }: { slug: string }) {
           <h3 style={{ marginTop: 0 }}>Agent Metrics</h3>
           {selectedAgentId ? (
             <div className="metric-grid">
-              <Metric label="Tasks assigned" value={agentStats.get(selectedAgentId)?.tasks_assigned ?? 0} />
-              <Metric label="Tasks in progress" value={agentStats.get(selectedAgentId)?.tasks_in_progress ?? 0} />
-              <Metric label="Tasks completed" value={agentStats.get(selectedAgentId)?.tasks_completed ?? 0} />
-              <Metric label="Accepted rate" value={`${agentStats.get(selectedAgentId)?.accepted_rate_percent ?? 0}%`} />
-              <Metric label="Last activity" value={agentStats.get(selectedAgentId)?.last_activity ? new Date(agentStats.get(selectedAgentId)?.last_activity).toLocaleString() : "—"} />
+              <Metric icon={<ListTodo size={14} />} label="Tasks assigned" value={agentStats.get(selectedAgentId)?.tasks_assigned ?? 0} />
+              <Metric icon={<Loader size={14} />} label="In progress" value={agentStats.get(selectedAgentId)?.tasks_in_progress ?? 0} />
+              <Metric icon={<CheckCircle size={14} />} label="Completed" value={agentStats.get(selectedAgentId)?.tasks_completed ?? 0} />
+              <Metric icon={<TrendingUp size={14} />} label="Accepted rate" value={`${agentStats.get(selectedAgentId)?.accepted_rate_percent ?? 0}%`} />
+              <Metric icon={<Clock size={14} />} label="Last activity" value={agentStats.get(selectedAgentId)?.last_activity ? new Date(agentStats.get(selectedAgentId)?.last_activity).toLocaleString() : "—"} smallValue />
             </div>
           ) : <p className="muted">Select an agent to inspect exact metrics.</p>}
         </article>
@@ -473,19 +490,35 @@ function AgentsTab({ slug }: { slug: string }) {
           <div className="grid">
             {filteredTasks.map((task) => {
               const hasResult = task.result && !PENDING_STATUSES.includes(task.status);
-              const icon = task.status === "accepted" ? "\u2705" : task.status === "rejected" ? "\u274C" : null;
+              const statusIcon: Record<string, React.ReactNode> = {
+                accepted: <CircleCheck size={16} style={{ color: "#16a34a" }} />,
+                rejected: <CircleX size={16} style={{ color: "#dc2626" }} />,
+                in_progress: <Loader size={16} className="spin-icon" style={{ color: "#3b82f6" }} />,
+                proposed: <CircleDot size={16} style={{ color: "#9ca3af" }} />,
+                critique_period: <MessageSquareMore size={16} style={{ color: "#d97706" }} />,
+                voting: <Vote size={16} style={{ color: "#d97706" }} />,
+                completed: <CircleCheck size={16} style={{ color: "#d97706" }} />,
+                superseded: <CircleMinus size={16} style={{ color: "#9ca3af" }} />,
+              };
+              const typeIcon: Record<string, React.ReactNode> = {
+                literature_review: <BookOpen size={14} />,
+                analysis: <BarChart3 size={14} />,
+                deep_research: <Microscope size={14} />,
+                critique: <MessageSquareMore size={14} />,
+                synthesis: <FlaskConical size={14} />,
+              };
               return (
                 <div key={task.id} className="card" style={{ padding: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {icon && <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>}
+                    <span style={{ flexShrink: 0, display: "flex" }}>{statusIcon[task.status] || <CircleDot size={16} style={{ color: "#9ca3af" }} />}</span>
                     <div>
                       <strong>{task.title}</strong>
-                      <p className="muted" style={{ marginBottom: 0 }}>{task.task_type.replace(/_/g, " ")}{!icon ? ` • ${task.status.replace(/_/g, " ")}` : ""}</p>
+                      <p className="muted" style={{ marginBottom: 0, display: "flex", alignItems: "center", gap: 4 }}>{typeIcon[task.task_type]}{task.task_type.replace(/_/g, " ")}</p>
                     </div>
                   </div>
                   {hasResult && (
-                    <button className="btn" style={{ flexShrink: 0, fontSize: 12, padding: "4px 10px" }} onClick={() => setViewingTask(task)}>
-                      View output
+                    <button className="btn" style={{ flexShrink: 0, fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setViewingTask(task)}>
+                      <ExternalLink size={14} /> View output
                     </button>
                   )}
                 </div>
@@ -500,11 +533,11 @@ function AgentsTab({ slug }: { slug: string }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string | number }) {
+function Metric({ label, value, icon, smallValue }: { label: string; value: string | number; icon?: React.ReactNode; smallValue?: boolean }) {
   return (
     <div className="metric">
-      <div className="metric-label">{label}</div>
-      <div className="metric-value">{value}</div>
+      <div className="metric-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>{icon}{label}</div>
+      <div className="metric-value" style={smallValue ? { fontSize: 13 } : undefined}>{value}</div>
     </div>
   );
 }
@@ -563,7 +596,7 @@ function DiscussionTab({ slug }: { slug: string }) {
   return (
     <section className="card">
       <AuthPromptModal open={needsAuth} onClose={() => setNeedsAuth(false)} />
-      <h2 style={{ marginTop: 0 }}>Discussion</h2>
+      <h2 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><MessageSquare size={20} /> Discussion</h2>
       <p className="muted">Markdown messages + mixed activity timeline (polling 5s).</p>
 
       <div className="card" style={{ maxHeight: "64vh", overflow: "auto" }}>
@@ -571,14 +604,14 @@ function DiscussionTab({ slug }: { slug: string }) {
           if (entry.kind === "activity") {
             return (
               <div key={`a-${idx}`} style={{ padding: "8px 0", borderBottom: "1px dashed #e5e7eb" }}>
-                <p style={{ margin: 0, fontSize: 12, color: "#6b7280" }}>[activity] {entry.item.activity_type} • {new Date(entry.item.created_at).toLocaleTimeString()}</p>
+                <p style={{ margin: 0, fontSize: 12, color: "#6b7280", display: "flex", alignItems: "center", gap: 4 }}><Activity size={14} /> {entry.item.activity_type} • {new Date(entry.item.created_at).toLocaleTimeString()}</p>
                 <p style={{ margin: "4px 0 0" }}>{entry.item.message}</p>
               </div>
             );
           }
           return (
             <div key={`c-${idx}`} style={{ padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
-              <p style={{ margin: 0, fontSize: 12, color: "#6b7280" }}>{entry.item.author_name} • {new Date(entry.item.created_at).toLocaleTimeString()}</p>
+              <p style={{ margin: 0, fontSize: 12, color: "#6b7280", display: "flex", alignItems: "center", gap: 4 }}><MessageCircle size={14} /> {entry.item.author_name} • {new Date(entry.item.created_at).toLocaleTimeString()}</p>
               <div style={{ marginTop: 6 }}><ReactMarkdown>{entry.item.body}</ReactMarkdown></div>
             </div>
           );
@@ -588,7 +621,7 @@ function DiscussionTab({ slug }: { slug: string }) {
       <form className="grid" onSubmit={submit} style={{ marginTop: 10 }}>
         <textarea className="textarea" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Write markdown message..." />
         {error && <p style={{ color: "#dc2626", margin: 0 }}>{error}</p>}
-        <button className="btn btn-primary">Post message</button>
+        <button className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Send size={14} /> Post message</button>
       </form>
     </section>
   );
@@ -636,11 +669,11 @@ function DocsTab({ slug }: { slug: string }) {
   return (
     <div className="grid" style={{ gridTemplateColumns: "280px 1fr", gap: 12 }}>
       <aside className="card" style={{ maxHeight: "70vh", overflow: "auto" }}>
-        <h3 style={{ marginTop: 0 }}>Docs</h3>
+        <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><FileText size={18} /> Docs</h3>
         <div className="grid">
           {docs.map((doc) => (
             <button key={doc.id} className="card" style={{ textAlign: "left", padding: 10, borderColor: selected?.id === doc.id ? "#0f766e" : "#e5e7eb" }} onClick={() => setSelected(doc)}>
-              <strong>{doc.filename}</strong>
+              <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><File size={14} /> {doc.filename}</strong>
               <p className="muted" style={{ marginBottom: 0, fontSize: 12 }}>{doc.logical_path}</p>
             </button>
           ))}
@@ -649,8 +682,8 @@ function DocsTab({ slug }: { slug: string }) {
 
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ marginTop: 0 }}>{selected ? selected.filename : "Select a doc"}</h3>
-          <button className="btn" onClick={download} disabled={!selected}>Download</button>
+          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><FileText size={18} /> {selected ? selected.filename : "Select a doc"}</h3>
+          <button className="btn" onClick={download} disabled={!selected} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Download size={14} /> Download</button>
         </div>
         {selected ? (
           <article className="card" style={{ maxHeight: "68vh", overflow: "auto" }}>

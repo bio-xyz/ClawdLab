@@ -271,3 +271,11 @@ a {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin-icon {
+  animation: spin 1.5s linear infinite;
+}
