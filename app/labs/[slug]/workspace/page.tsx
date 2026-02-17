@@ -116,7 +116,7 @@ function OverviewTab({ slug }: { slug: string }) {
           <Link className="btn" href="/forum" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}><ArrowLeft size={14} /> Back to forum</Link>
         </div>
 
-        <div className="card" style={{ background: "#ecfeff", borderColor: "#a5f3fc", minHeight: 120, position: "relative", overflow: "hidden" }}>
+        <div className="card" style={{ background: "var(--accent-soft)", borderColor: "var(--accent)", minHeight: 120, position: "relative", overflow: "hidden" }}>
           <p style={{ marginTop: 0, fontWeight: 600 }}>Live Lab Animation (lightweight)</p>
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             {[0, 1, 2, 3].map((idx) => (
@@ -170,13 +170,13 @@ const STATUS_LABELS: Record<string, string> = {
   concluded_inconclusive: "Inconclusive",
 };
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  draft: { bg: "#f1f5f9", text: "#64748b" },
-  active: { bg: "#ccfbf1", text: "#0f766e" },
-  concluded_proven: { bg: "#dcfce7", text: "#16a34a" },
-  concluded_disproven: { bg: "#fee2e2", text: "#dc2626" },
-  concluded_pivoted: { bg: "#fef3c7", text: "#d97706" },
-  concluded_inconclusive: { bg: "#f1f5f9", text: "#64748b" },
+const STATUS_COLORS: Record<string, { text: string }> = {
+  draft: { text: "#64748b" },
+  active: { text: "#0f766e" },
+  concluded_proven: { text: "#16a34a" },
+  concluded_disproven: { text: "#dc2626" },
+  concluded_pivoted: { text: "#d97706" },
+  concluded_inconclusive: { text: "#64748b" },
 };
 
 function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]; stateTasks: any[]; activity: any[] }) {
@@ -244,7 +244,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
           {/* Status badge + title */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{
-              background: colors.bg,
+              background: "var(--accent-soft)",
               color: colors.text,
               fontSize: 11,
               fontWeight: 600,
@@ -298,7 +298,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
 
           {/* Conclusion for concluded states */}
           {current?.conclusion_summary && (
-            <div style={{ background: colors.bg, borderRadius: 10, padding: 12 }}>
+            <div style={{ background: "var(--accent-soft)", borderRadius: 10, padding: 12 }}>
               <div style={{ fontSize: 12, color: colors.text, fontWeight: 600, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Award size={14} /> Conclusion</div>
               <p style={{ margin: 0 }}>{current.conclusion_summary}</p>
             </div>
@@ -534,7 +534,7 @@ function AgentsTab({ slug }: { slug: string }) {
         <button className="btn" style={{ width: "100%", marginBottom: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }} onClick={() => setSelectedAgentId(null)}><Users size={14} /> All agents</button>
         <div className="grid">
           {members.map((member) => (
-            <button key={member.agent_id} className="card" style={{ textAlign: "left", cursor: "pointer", borderColor: selectedAgentId === member.agent_id ? "#0f766e" : "#e5e7eb" }} onClick={() => setSelectedAgentId(member.agent_id)}>
+            <button key={member.agent_id} className="card" style={{ textAlign: "left", cursor: "pointer", borderColor: selectedAgentId === member.agent_id ? "var(--accent)" : "var(--border)" }} onClick={() => setSelectedAgentId(member.agent_id)}>
               <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><Bot size={14} /> {member.display_name}</strong>
               <p className="muted" style={{ marginBottom: 0 }}>role: {member.role}</p>
             </button>
@@ -625,14 +625,14 @@ function Metric({ label, value, icon, smallValue }: { label: string; value: stri
 }
 
 const AUTHOR_PALETTES = [
-  { bg: "#fef7f0", border: "#f97316", avatar: "#fff7ed" }, // warm orange
-  { bg: "#f0f7fe", border: "#3b82f6", avatar: "#eff6ff" }, // soft blue
-  { bg: "#f0fef4", border: "#16a34a", avatar: "#f0fdf4" }, // mint green
-  { bg: "#fdf0fe", border: "#d946ef", avatar: "#fdf4ff" }, // soft pink
-  { bg: "#fefef0", border: "#ca8a04", avatar: "#fefce8" }, // soft gold
-  { bg: "#f4f0fe", border: "#8b5cf6", avatar: "#f5f3ff" }, // lavender
-  { bg: "#f0fefe", border: "#0891b2", avatar: "#ecfeff" }, // cyan
-  { bg: "#fef0f0", border: "#ef4444", avatar: "#fef2f2" }, // rose
+  { border: "#f97316" }, // warm orange
+  { border: "#3b82f6" }, // soft blue
+  { border: "#16a34a" }, // mint green
+  { border: "#d946ef" }, // soft pink
+  { border: "#ca8a04" }, // soft gold
+  { border: "#8b5cf6" }, // lavender
+  { border: "#0891b2" }, // cyan
+  { border: "#ef4444" }, // rose
 ];
 
 function authorColor(name: string) {
@@ -648,7 +648,7 @@ function AuthorAvatar({ name }: { name: string }) {
     <span style={{
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       width: 28, height: 28, borderRadius: "50%",
-      background: palette.avatar, border: `2px solid ${palette.border}`,
+      background: "var(--bg)", border: `2px solid ${palette.border}`,
       fontSize: 11, fontWeight: 700, color: palette.border, flexShrink: 0,
     }}>
       {initials}
@@ -729,13 +729,13 @@ function DiscussionTab({ slug }: { slug: string }) {
             const agentName = entry.item.agent_name || "";
             return (
               <div key={`a-${idx}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "2px 0" }}>
-                <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
-                <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
                   <Activity size={12} />
                   {agentName && <strong>{agentName}</strong>}
                   {entry.item.activity_type.replace(/_/g, " ")} — {new Date(entry.item.created_at).toLocaleTimeString()}
                 </span>
-                <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
               </div>
             );
           }
@@ -743,7 +743,7 @@ function DiscussionTab({ slug }: { slug: string }) {
           const palette = authorColor(entry.item.author_name);
           return (
             <div key={`c-${idx}`} style={{
-              background: palette.bg,
+              background: "var(--bg)",
               borderLeft: `3px solid ${palette.border}`,
               borderRadius: 8,
               padding: "10px 14px",
@@ -751,7 +751,7 @@ function DiscussionTab({ slug }: { slug: string }) {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <AuthorAvatar name={entry.item.author_name} />
                 <strong style={{ fontSize: 13, color: palette.border }}>{entry.item.author_name}</strong>
-                <span style={{ fontSize: 11, color: "#9ca3af" }}>{new Date(entry.item.created_at).toLocaleTimeString()}</span>
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>{new Date(entry.item.created_at).toLocaleTimeString()}</span>
               </div>
               <div className="discussion-body"><ReactMarkdown>{entry.item.body}</ReactMarkdown></div>
             </div>
@@ -813,7 +813,7 @@ function DocsTab({ slug }: { slug: string }) {
         <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><FileText size={18} /> Docs</h3>
         <div className="grid">
           {docs.map((doc) => (
-            <button key={doc.id} className="card" style={{ textAlign: "left", padding: 10, borderColor: selected?.id === doc.id ? "#0f766e" : "#e5e7eb" }} onClick={() => setSelected(doc)}>
+            <button key={doc.id} className="card" style={{ textAlign: "left", padding: 10, borderColor: selected?.id === doc.id ? "var(--accent)" : "var(--border)" }} onClick={() => setSelected(doc)}>
               <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><File size={14} /> {doc.filename}</strong>
               <p className="muted" style={{ marginBottom: 0, fontSize: 12 }}>{doc.logical_path}</p>
             </button>
