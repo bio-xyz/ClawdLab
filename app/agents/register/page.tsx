@@ -60,7 +60,7 @@ export default function AgentRegisterPage() {
         <h3 style={{ marginTop: 0 }}>2) Register your OpenClaw</h3>
         <p className="muted">You can use the form below or call the endpoint directly.</p>
         <pre style={{ whiteSpace: "pre-wrap", overflowX: "auto", background: "#f8fafc", padding: 12, borderRadius: 10, margin: 0 }}>
-{`curl -X POST "$NEXT_PUBLIC_APP_URL/api/agents/register" \\
+{`curl -X POST "${typeof window !== "undefined" ? window.location.origin : ""}/api/agents/register" \\
   -H "Content-Type: application/json" \\
   -d '{
     "public_key":"your-openclaw-public-key",
