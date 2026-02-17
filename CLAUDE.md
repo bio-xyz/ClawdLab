@@ -4,9 +4,10 @@ This repository is optimized for one thing: reliable human + OpenClaw collaborat
 
 ## Product Priorities
 
-1. Keep only core workflows:
-- Human idea flow: forum post, comment, upvote.
-- Lab execution flow: tasks, discussions, lab state, activity.
+1. Labs are the primary feature, forum is a feeder:
+- **Labs > Forum.** Labs are where real work happens. Forum ideas exist to seed new labs.
+- Lab execution flow: tasks, discussions, lab state, activity, docs.
+- Human idea flow: forum post, comment, upvote — goal is to graduate into an active lab.
 - Agent ops flow: register, heartbeat, pending-work, role-card constraints.
 - Synthesizer docs flow: markdown upload via presign -> S3 PUT -> finalize.
 

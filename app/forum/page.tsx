@@ -14,7 +14,14 @@ interface ForumPost {
   comment_count: number;
   created_at: string;
   lab_slug: string | null;
+  lab_name: string | null;
+  lab_description: string | null;
+  lab_member_count: number;
+  lab_task_count: number;
+  lab_doc_count: number;
 }
+
+type Filter = "all" | "labs" | "ideas";
 
 export default function ForumPage() {
   const { user } = useCurrentUser();
@@ -23,6 +30,7 @@ export default function ForumPage() {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
 
   const load = async () => {
     const res = await fetch("/api/forum?per_page=50", { cache: "no-store" });
@@ -60,15 +68,32 @@ export default function ForumPage() {
     load();
   };
 
-  const sorted = useMemo(() => [...posts].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)), [posts]);
+  const sorted = useMemo(
+    () => [...posts].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)),
+    [posts],
+  );
+
+  const filtered = useMemo(() => {
+    if (filter === "labs") return sorted.filter((p) => p.lab_slug);
+    if (filter === "ideas") return sorted.filter((p) => !p.lab_slug);
+    // "all": labs first, then ideas
+    return [...sorted].sort((a, b) => {
+      if (a.lab_slug && !b.lab_slug) return -1;
+      if (!a.lab_slug && b.lab_slug) return 1;
+      return 0;
+    });
+  }, [sorted, filter]);
+
+  const labCount = posts.filter((p) => p.lab_slug).length;
+  const ideaCount = posts.filter((p) => !p.lab_slug).length;
 
   return (
     <div className="grid" style={{ gap: 14 }}>
       <AuthPromptModal open={needsAuth} onClose={() => setNeedsAuth(false)} />
 
       <section className="card">
-        <h1 style={{ marginTop: 0 }}>Forum Ideas</h1>
-        <p className="muted">Public ideas feed. Authenticated users can post and comment.</p>
+        <h1 style={{ marginTop: 0 }}>Explore</h1>
+        <p className="muted">Post research ideas. Promising ones become active labs.</p>
         <form className="grid" onSubmit={submit}>
           <input className="input" placeholder="Idea title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <textarea className="textarea" placeholder="Write your idea in markdown..." value={body} onChange={(e) => setBody(e.target.value)} />
@@ -80,18 +105,52 @@ export default function ForumPage() {
         </form>
       </section>
 
-      {sorted.map((post) => (
-        <article key={post.id} className="card">
-          <Link href={`/forum/${post.id}`}><h3 style={{ marginTop: 0, marginBottom: 8 }}>{post.title}</h3></Link>
-          <p className="muted" style={{ marginTop: 0 }}>{post.body.slice(0, 280)}{post.body.length > 280 ? "..." : ""}</p>
-          <div style={{ display: "flex", gap: 12, color: "#6b7280", fontSize: 13 }}>
-            <span>{post.author_name}</span>
-            <span>{post.upvotes} upvotes</span>
-            <span>{post.comment_count} comments</span>
-            {post.lab_slug ? <Link href={`/labs/${post.lab_slug}/workspace`} style={{ color: "#0f766e" }}>Open lab</Link> : <span>No lab yet</span>}
-          </div>
-        </article>
-      ))}
+      {/* Filter tabs */}
+      <div className="tabs">
+        <button className={`tab${filter === "all" ? " active" : ""}`} onClick={() => setFilter("all")}>
+          All ({posts.length})
+        </button>
+        <button className={`tab${filter === "labs" ? " active" : ""}`} onClick={() => setFilter("labs")}>
+          Active Labs ({labCount})
+        </button>
+        <button className={`tab${filter === "ideas" ? " active" : ""}`} onClick={() => setFilter("ideas")}>
+          Ideas ({ideaCount})
+        </button>
+      </div>
+
+      {filtered.map((post) =>
+        post.lab_slug ? (
+          <article key={post.id} className="card lab-card">
+            <div className="lab-card-header">
+              <span className="lab-badge">Lab</span>
+              <h3 style={{ margin: 0 }}>{post.lab_name || post.title}</h3>
+            </div>
+            {post.lab_description && (
+              <p className="muted" style={{ margin: "8px 0 0" }}>{post.lab_description.slice(0, 200)}{post.lab_description.length > 200 ? "..." : ""}</p>
+            )}
+            <div className="lab-stats">
+              <span>{post.lab_member_count} agent{post.lab_member_count !== 1 ? "s" : ""}</span>
+              <span>{post.lab_task_count} task{post.lab_task_count !== 1 ? "s" : ""}</span>
+              <span>{post.lab_doc_count} doc{post.lab_doc_count !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="lab-card-actions">
+              <Link href={`/labs/${post.lab_slug}/workspace`} className="btn btn-primary">Enter lab</Link>
+              <Link href={`/forum/${post.id}`} className="muted" style={{ fontSize: 13 }}>View original idea</Link>
+            </div>
+          </article>
+        ) : (
+          <article key={post.id} className="card">
+            <Link href={`/forum/${post.id}`}><h3 style={{ marginTop: 0, marginBottom: 8 }}>{post.title}</h3></Link>
+            <p className="muted" style={{ marginTop: 0 }}>{post.body.slice(0, 280)}{post.body.length > 280 ? "..." : ""}</p>
+            <div style={{ display: "flex", gap: 12, color: "#6b7280", fontSize: 13 }}>
+              <span>{post.author_name}</span>
+              <span>{post.upvotes} upvotes</span>
+              <span>{post.comment_count} comments</span>
+              <span className="muted">No lab yet</span>
+            </div>
+          </article>
+        ),
+      )}
     </div>
   );
 }

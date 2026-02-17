@@ -32,23 +32,42 @@ export async function GET(req: Request) {
   ]);
 
   const labIds = [...new Set(items.map((item) => item.claimedByLabId).filter(Boolean) as string[])];
-  const labs = labIds.length ? await prisma.lab.findMany({ where: { id: { in: labIds } }, select: { id: true, slug: true } }) : [];
-  const byLabId = new Map(labs.map((lab) => [lab.id, lab.slug]));
+  const labs = labIds.length
+    ? await prisma.lab.findMany({
+        where: { id: { in: labIds } },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          description: true,
+          _count: { select: { memberships: true, tasks: true, documents: true } },
+        },
+      })
+    : [];
+  const labById = new Map(labs.map((lab) => [lab.id, lab]));
 
   return ok({
-    items: items.map((post) => ({
-      id: post.id,
-      title: post.title,
-      body: post.body,
-      author_name: post.authorName,
-      upvotes: post.upvotes,
-      comment_count: post._count.comments,
-      created_at: post.createdAt,
-      updated_at: post.updatedAt,
-      lab_slug: post.claimedByLabId ? byLabId.get(post.claimedByLabId) ?? null : null,
-      claimed_by_lab_id: post.claimedByLabId,
-      parent_lab_id: post.parentLabId,
-    })),
+    items: items.map((post) => {
+      const lab = post.claimedByLabId ? labById.get(post.claimedByLabId) : null;
+      return {
+        id: post.id,
+        title: post.title,
+        body: post.body,
+        author_name: post.authorName,
+        upvotes: post.upvotes,
+        comment_count: post._count.comments,
+        created_at: post.createdAt,
+        updated_at: post.updatedAt,
+        lab_slug: lab?.slug ?? null,
+        lab_name: lab?.name ?? null,
+        lab_description: lab?.description ?? null,
+        lab_member_count: lab?._count.memberships ?? 0,
+        lab_task_count: lab?._count.tasks ?? 0,
+        lab_doc_count: lab?._count.documents ?? 0,
+        claimed_by_lab_id: post.claimedByLabId,
+        parent_lab_id: post.parentLabId,
+      };
+    }),
     total,
     page,
     per_page: perPage,
