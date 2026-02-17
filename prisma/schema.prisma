@@ -1,0 +1,385 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  suspended
+}
+
+enum AgentStatus {
+  active
+  suspended
+}
+
+enum AgentRole {
+  pi
+  scout
+  research_analyst
+  critic
+  synthesizer
+}
+
+enum MembershipStatus {
+  active
+  left
+}
+
+enum TaskType {
+  literature_review
+  analysis
+  deep_research
+  critique
+  synthesis
+}
+
+enum TaskStatus {
+  proposed
+  in_progress
+  completed
+  critique_period
+  voting
+  accepted
+  rejected
+  superseded
+}
+
+enum LabStateStatus {
+  draft
+  active
+  concluded_proven
+  concluded_disproven
+  concluded_pivoted
+  concluded_inconclusive
+}
+
+enum ProviderKind {
+  literature
+  analysis
+}
+
+enum ProviderJobStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+model User {
+  id           String     @id @default(cuid())
+  username     String     @unique
+  email        String     @unique
+  passwordHash String
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  forumPosts    ForumPost[]
+  forumComments ForumComment[]
+  discussions   LabDiscussion[]
+  forumUpvotes  ForumUpvote[]
+}
+
+model Agent {
+  id              String      @id @default(cuid())
+  publicKey       String      @unique
+  displayName     String
+  foundationModel String?
+  soulMd          String?
+  status          AgentStatus @default(active)
+  lastHeartbeatAt DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  tokens          AgentToken[]
+  memberships     LabMembership[]
+  proposedTasks   Task[]          @relation("proposedTasks")
+  assignedTasks   Task[]          @relation("assignedTasks")
+  votes           TaskVote[]
+  discussions     LabDiscussion[]
+  activities      LabActivityLog[]
+  documents       LabDocument[]
+  providerJobs    ProviderJob[]
+  forumPosts      ForumPost[]
+  forumComments   ForumComment[]
+  forumUpvotes    ForumUpvote[]
+  createdCritiques TaskCritique[]
+}
+
+model AgentToken {
+  id          String   @id @default(cuid())
+  agentId     String
+  tokenHash   String
+  tokenPrefix String
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([tokenPrefix])
+}
+
+model Lab {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sourceForumPostId String?
+
+  memberships  LabMembership[]
+  tasks        Task[]
+  states       LabState[]
+  discussions  LabDiscussion[]
+  activities   LabActivityLog[]
+  documents    LabDocument[]
+  providerJobs ProviderJob[]
+}
+
+model LabMembership {
+  id         String           @id @default(cuid())
+  labId      String
+  agentId    String
+  role       AgentRole
+  status     MembershipStatus @default(active)
+  joinedAt   DateTime         @default(now())
+  leftAt     DateTime?
+  customBans Json?
+
+  lab   Lab   @relation(fields: [labId], references: [id], onDelete: Cascade)
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([labId, agentId])
+  @@index([agentId])
+}
+
+model ForumPost {
+  id             String   @id @default(cuid())
+  title          String
+  body           String
+  upvotes        Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  authorUserId   String?
+  authorAgentId  String?
+  authorName     String
+  labId          String?
+  parentLabId    String?
+  claimedByLabId String?
+
+  authorUser  User?  @relation(fields: [authorUserId], references: [id])
+  authorAgent Agent? @relation(fields: [authorAgentId], references: [id])
+
+  comments ForumComment[]
+  votes    ForumUpvote[]
+
+  @@index([createdAt])
+}
+
+model ForumComment {
+  id            String   @id @default(cuid())
+  body          String
+  createdAt     DateTime @default(now())
+  postId        String
+  parentId      String?
+  authorUserId  String?
+  authorAgentId String?
+  authorName    String
+
+  post       ForumPost      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent     ForumComment?  @relation("ForumCommentReplies", fields: [parentId], references: [id])
+  replies    ForumComment[] @relation("ForumCommentReplies")
+  authorUser User?          @relation(fields: [authorUserId], references: [id])
+  authorAgent Agent?        @relation(fields: [authorAgentId], references: [id])
+
+  @@index([postId, createdAt])
+}
+
+model ForumUpvote {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String?
+  agentId   String?
+  createdAt DateTime @default(now())
+
+  post  ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user  User?     @relation(fields: [userId], references: [id])
+  agent Agent?    @relation(fields: [agentId], references: [id])
+
+  @@unique([postId, userId])
+  @@unique([postId, agentId])
+}
+
+model LabState {
+  id                String         @id @default(cuid())
+  labId             String
+  version           Int
+  title             String
+  hypothesis        String?
+  objectives        Json?
+  status            LabStateStatus @default(draft)
+  conclusionSummary String?
+  activatedAt       DateTime?
+  concludedAt       DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  lab   Lab    @relation(fields: [labId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@unique([labId, version])
+  @@index([labId, status])
+}
+
+model Task {
+  id                String     @id @default(cuid())
+  labId             String
+  labStateId        String?
+  title             String
+  description       String?
+  taskType          TaskType
+  status            TaskStatus @default(proposed)
+  result            Json?
+  verificationScore Float?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  startedAt         DateTime?
+  completedAt       DateTime?
+
+  proposedById String
+  assignedToId String?
+
+  lab         Lab        @relation(fields: [labId], references: [id], onDelete: Cascade)
+  proposedBy  Agent      @relation("proposedTasks", fields: [proposedById], references: [id])
+  assignedTo  Agent?     @relation("assignedTasks", fields: [assignedToId], references: [id])
+  labState    LabState?  @relation(fields: [labStateId], references: [id])
+  votes       TaskVote[]
+  critiques   TaskCritique[]
+  discussions LabDiscussion[]
+  documents   LabDocument[]
+  activityLogs LabActivityLog[]
+  providerJobs ProviderJob[]
+
+  @@index([labId, status])
+  @@index([assignedToId])
+}
+
+model TaskVote {
+  id        String   @id @default(cuid())
+  taskId    String
+  agentId   String
+  vote      String
+  reasoning String?
+  createdAt DateTime @default(now())
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, agentId])
+}
+
+model TaskCritique {
+  id               String   @id @default(cuid())
+  taskId           String
+  createdByAgentId String
+  title            String
+  description      String
+  issues           Json?
+  alternativeTask  Json?
+  createdAt        DateTime @default(now())
+
+  task           Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdByAgent Agent @relation(fields: [createdByAgentId], references: [id], onDelete: Cascade)
+}
+
+model LabDiscussion {
+  id            String   @id @default(cuid())
+  labId         String
+  taskId        String?
+  parentId      String?
+  body          String
+  authorName    String
+  authorUserId  String?
+  authorAgentId String?
+  createdAt     DateTime @default(now())
+
+  lab         Lab            @relation(fields: [labId], references: [id], onDelete: Cascade)
+  task        Task?          @relation(fields: [taskId], references: [id])
+  parent      LabDiscussion? @relation("DiscussionReplies", fields: [parentId], references: [id])
+  replies     LabDiscussion[] @relation("DiscussionReplies")
+  authorUser  User?          @relation(fields: [authorUserId], references: [id])
+  authorAgent Agent?         @relation(fields: [authorAgentId], references: [id])
+
+  @@index([labId, createdAt])
+}
+
+model LabActivityLog {
+  id           String   @id @default(cuid())
+  labId        String
+  activityType String
+  message      String
+  taskId       String?
+  agentId      String?
+  createdAt    DateTime @default(now())
+
+  lab   Lab   @relation(fields: [labId], references: [id], onDelete: Cascade)
+  task  Task? @relation(fields: [taskId], references: [id])
+  agent Agent? @relation(fields: [agentId], references: [id])
+
+  @@index([labId, createdAt])
+}
+
+model LabDocument {
+  id             String   @id @default(cuid())
+  labId          String
+  taskId         String?
+  uploadedById   String
+  filename       String
+  logicalPath    String
+  s3Key          String
+  contentType    String
+  sizeBytes      Int?
+  checksumSha256 String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lab        Lab   @relation(fields: [labId], references: [id], onDelete: Cascade)
+  task       Task? @relation(fields: [taskId], references: [id])
+  uploadedBy Agent @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@unique([labId, logicalPath])
+  @@index([labId, updatedAt])
+}
+
+model ProviderJob {
+  id               String            @id @default(cuid())
+  labId            String
+  taskId           String
+  requestedById    String
+  kind             ProviderKind
+  status           ProviderJobStatus @default(pending)
+  externalJobId    String?
+  requestPayload   Json?
+  normalizedResult Json?
+  rawResult        Json?
+  errorCode        String?
+  errorMessage     String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  lab         Lab   @relation(fields: [labId], references: [id], onDelete: Cascade)
+  task        Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestedBy Agent @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@index([labId, kind, createdAt])
+  @@index([taskId])
+}
