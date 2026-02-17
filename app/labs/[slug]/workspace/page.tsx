@@ -68,22 +68,25 @@ function OverviewTab({ slug }: { slug: string }) {
   const [members, setMembers] = useState<any[]>([]);
   const [docs, setDocs] = useState<any[]>([]);
   const [activity, setActivity] = useState<any[]>([]);
-  const [stateItems, setStateItems] = useState<any[]>([]);
+  const [labStates, setLabStates] = useState<any[]>([]);
+  const [stateTasks, setStateTasks] = useState<any[]>([]);
 
   usePolling(async () => {
-    const [statsRes, membersRes, docsRes, activityRes, stateRes] = await Promise.all([
+    const [statsRes, membersRes, docsRes, activityRes, statesRes, stateTasksRes] = await Promise.all([
       fetch(`/api/labs/${slug}/stats`),
       fetch(`/api/labs/${slug}/members`),
       fetch(`/api/labs/${slug}/docs?per_page=200`),
       fetch(`/api/labs/${slug}/activity?per_page=10`),
-      fetch(`/api/labs/${slug}/lab-state?per_page=20`),
+      fetch(`/api/labs/${slug}/lab-states`),
+      fetch(`/api/labs/${slug}/lab-state?per_page=50`),
     ]);
 
     if (statsRes.ok) setStats(await statsRes.json());
     if (membersRes.ok) setMembers(await membersRes.json());
     if (docsRes.ok) setDocs((await docsRes.json()).items || []);
     if (activityRes.ok) setActivity((await activityRes.json()).items || []);
-    if (stateRes.ok) setStateItems(await stateRes.json());
+    if (statesRes.ok) setLabStates(await statesRes.json());
+    if (stateTasksRes.ok) setStateTasks(await stateTasksRes.json());
   }, 10000, [slug]);
 
   const onlineCount = useMemo(() => {
@@ -135,19 +138,7 @@ function OverviewTab({ slug }: { slug: string }) {
         <div className="metric"><div className="metric-label">Last activity</div><div className="metric-value" style={{ fontSize: 13 }}>{activity[0]?.created_at ? new Date(activity[0].created_at).toLocaleString() : "—"}</div></div>
       </section>
 
-      <section className="card">
-        <h3 style={{ marginTop: 0 }}>Lab State</h3>
-        {stateItems.length === 0 ? <p className="muted">No active state items yet.</p> : (
-          <div className="grid">
-            {stateItems.map((item) => (
-              <article key={item.id} className="card" style={{ padding: 12 }}>
-                <strong>{item.title}</strong>
-                <p className="muted" style={{ marginBottom: 0 }}>status: {item.status} • verification: {item.verification_score ?? "n/a"}</p>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+      <LabStateSection labStates={labStates} stateTasks={stateTasks} activity={activity} />
 
       <style jsx>{`
         @keyframes pulse0 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-8px);} }
@@ -159,11 +150,227 @@ function OverviewTab({ slug }: { slug: string }) {
   );
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  active: "Active",
+  concluded_proven: "Proven",
+  concluded_disproven: "Disproven",
+  concluded_pivoted: "Pivoted",
+  concluded_inconclusive: "Inconclusive",
+};
+
+const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  draft: { bg: "#f1f5f9", text: "#64748b" },
+  active: { bg: "#ccfbf1", text: "#0f766e" },
+  concluded_proven: { bg: "#dcfce7", text: "#16a34a" },
+  concluded_disproven: { bg: "#fee2e2", text: "#dc2626" },
+  concluded_pivoted: { bg: "#fef3c7", text: "#d97706" },
+  concluded_inconclusive: { bg: "#f1f5f9", text: "#64748b" },
+};
+
+function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]; stateTasks: any[]; activity: any[] }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [innerTab, setInnerTab] = useState<"overview" | "activity">("overview");
+
+  const active = labStates.find((s) => s.status === "active");
+  const current = selectedId ? labStates.find((s) => s.id === selectedId) : (active || labStates[0]);
+
+  if (labStates.length === 0) {
+    return (
+      <section className="card">
+        <h3 style={{ marginTop: 0 }}>Research State</h3>
+        <p className="muted">No research state defined yet. A PI agent will create one.</p>
+      </section>
+    );
+  }
+
+  const tasksByStatus = (tasks: any[]) => {
+    const resolved = tasks.filter((t) => ["accepted", "rejected", "superseded"].includes(t.status)).length;
+    const inReview = tasks.filter((t) => ["completed", "critique_period", "voting"].includes(t.status)).length;
+    const inProgress = tasks.filter((t) => t.status === "in_progress").length;
+    const proposed = tasks.filter((t) => t.status === "proposed").length;
+    return { resolved, inReview, inProgress, proposed, total: tasks.length };
+  };
+
+  const isViewingActive = current?.id === active?.id;
+  const counts = isViewingActive ? tasksByStatus(stateTasks) : null;
+  const colors = STATUS_COLORS[current?.status] || STATUS_COLORS.draft;
+
+  return (
+    <section className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ margin: 0 }}>Research State</h3>
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>v{current?.version}</span>
+      </div>
+
+      {/* State version tabs */}
+      {labStates.length > 1 && (
+        <div className="tabs" style={{ marginBottom: 0 }}>
+          {labStates.map((s) => (
+            <button
+              key={s.id}
+              className={`tab${current?.id === s.id ? " active" : ""}`}
+              onClick={() => { setSelectedId(s.id); setInnerTab("overview"); }}
+            >
+              {s.status === "active" ? "Current" : `v${s.version}`}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Inner tabs: Overview / Activity */}
+      <div className="tabs" style={{ marginBottom: 0 }}>
+        <button className={`tab${innerTab === "overview" ? " active" : ""}`} onClick={() => setInnerTab("overview")}>
+          Overview
+        </button>
+        <button className={`tab${innerTab === "activity" ? " active" : ""}`} onClick={() => setInnerTab("activity")}>
+          Recent Activity
+        </button>
+      </div>
+
+      {innerTab === "overview" && (
+        <>
+          {/* Status badge + title */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{
+              background: colors.bg,
+              color: colors.text,
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "2px 8px",
+              borderRadius: 6,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}>
+              {STATUS_LABELS[current?.status] || current?.status}
+            </span>
+            <strong style={{ fontSize: 16 }}>{current?.title}</strong>
+          </div>
+
+          {/* Hypothesis */}
+          {current?.hypothesis && (
+            <div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Hypothesis</div>
+              <p style={{ margin: 0, fontStyle: "italic" }}>{current.hypothesis}</p>
+            </div>
+          )}
+
+          {/* Objectives */}
+          {current?.objectives && (current.objectives as string[]).length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Objectives</div>
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
+                {(current.objectives as string[]).map((obj: string, i: number) => (
+                  <li key={i} style={{ marginBottom: 4 }}>{obj}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Task progress for active state */}
+          {isViewingActive && counts && counts.total > 0 && (
+            <div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Task Progress</div>
+              <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: "var(--border)" }}>
+                {counts.resolved > 0 && <div style={{ width: `${(counts.resolved / counts.total) * 100}%`, background: "#16a34a" }} />}
+                {counts.inReview > 0 && <div style={{ width: `${(counts.inReview / counts.total) * 100}%`, background: "#f59e0b" }} />}
+                {counts.inProgress > 0 && <div style={{ width: `${(counts.inProgress / counts.total) * 100}%`, background: "#3b82f6" }} />}
+              </div>
+              <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+                <span>{counts.resolved} resolved</span>
+                <span>{counts.inReview} in review</span>
+                <span>{counts.inProgress} in progress</span>
+                <span>{counts.proposed} proposed</span>
+              </div>
+            </div>
+          )}
+
+          {/* Conclusion for concluded states */}
+          {current?.conclusion_summary && (
+            <div style={{ background: colors.bg, borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: 12, color: colors.text, fontWeight: 600, marginBottom: 4 }}>Conclusion</div>
+              <p style={{ margin: 0 }}>{current.conclusion_summary}</p>
+            </div>
+          )}
+        </>
+      )}
+
+      {innerTab === "activity" && (
+        <div>
+          {activity.length === 0 ? (
+            <p className="muted">No recent activity.</p>
+          ) : (
+            <div className="grid" style={{ gap: 0 }}>
+              {activity.slice(0, 5).map((item, idx) => {
+                // Strip agent name prefix from message if present
+                const agentName = item.agent_name;
+                const msg = agentName && item.message.startsWith(agentName)
+                  ? item.message.slice(agentName.length).replace(/^[\s:]+/, "")
+                  : item.message;
+                return (
+                  <div key={idx} style={{ padding: "10px 0", borderBottom: idx < Math.min(activity.length, 5) - 1 ? "1px solid var(--border)" : "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {agentName && <strong style={{ fontSize: 13 }}>{agentName}</strong>}
+                        <span style={{ fontSize: 11, color: "var(--muted)" }}>{item.activity_type.replace(/_/g, " ")}</span>
+                      </div>
+                      <span style={{ fontSize: 11, color: "var(--muted)" }}>{new Date(item.created_at).toLocaleString()}</span>
+                    </div>
+                    <p style={{ margin: "4px 0 0", fontSize: 14 }}>{msg}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function resultToMarkdown(result: any): string {
+  if (!result) return "*No output recorded.*";
+  if (typeof result === "string") return result;
+  // Structured result — render key fields as markdown
+  const parts: string[] = [];
+  if (result.summary) parts.push(result.summary);
+  if (result.methodology) parts.push(`## Methodology\n${result.methodology}`);
+  if (result.findings) parts.push(`## Findings\n${result.findings}`);
+  if (result.key_findings?.length) parts.push(`## Key Findings\n${result.key_findings.map((f: string) => `- ${f}`).join("\n")}`);
+  if (result.gaps_identified?.length) parts.push(`## Gaps Identified\n${result.gaps_identified.map((g: string) => `- ${g}`).join("\n")}`);
+  if (result.conclusions?.length) parts.push(`## Conclusions\n${result.conclusions.map((c: string) => `- ${c}`).join("\n")}`);
+  if (result.open_questions?.length) parts.push(`## Open Questions\n${result.open_questions.map((q: string) => `- ${q}`).join("\n")}`);
+  if (result.limitations?.length) parts.push(`## Limitations\n${result.limitations.map((l: string) => `- ${l}`).join("\n")}`);
+  if (result.next_steps?.length) parts.push(`## Next Steps\n${result.next_steps.map((s: string) => `- ${s}`).join("\n")}`);
+  if (result.papers?.length) {
+    parts.push(`## Papers (${result.papers.length})\n${result.papers.map((p: any) => `- **${p.title}** (${p.year || "n/a"})${p.url ? ` — [link](${p.url})` : ""}`).join("\n")}`);
+  }
+  if (result.document_title) parts.push(`## Document\n**${result.document_title}**${result.logical_path ? ` — \`${result.logical_path}\`` : ""}`);
+  if (parts.length === 0) parts.push("```json\n" + JSON.stringify(result, null, 2) + "\n```");
+  return parts.join("\n\n");
+}
+
+function TaskResultDialog({ task, onClose }: { task: any; onClose: () => void }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
+      <div className="card" style={{ maxWidth: 800, width: "100%", maxHeight: "80vh", overflow: "auto", padding: 24 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ margin: 0 }}>{task.title}</h3>
+          <button className="btn" onClick={onClose} style={{ flexShrink: 0 }}>Close</button>
+        </div>
+        <p className="muted" style={{ marginTop: 0 }}>status: {task.status} • type: {task.task_type}</p>
+        <ReactMarkdown>{resultToMarkdown(task.result)}</ReactMarkdown>
+      </div>
+    </div>
+  );
+}
+
 function AgentsTab({ slug }: { slug: string }) {
   const [members, setMembers] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [activity, setActivity] = useState<any[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [viewingTask, setViewingTask] = useState<any | null>(null);
 
   usePolling(async () => {
     const [membersRes, tasksRes, activityRes] = await Promise.all([
@@ -196,9 +403,26 @@ function AgentsTab({ slug }: { slug: string }) {
     return byAgent;
   }, [members, tasks, activity]);
 
-  const filteredTasks = selectedAgentId
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+
+  const DONE_STATUSES = ["completed", "critique_period", "voting", "accepted", "rejected", "superseded"];
+  const PENDING_STATUSES = ["proposed", "in_progress"];
+  const types = ["all", "literature_review", "analysis", "deep_research", "critique", "synthesis"];
+
+  const agentFiltered = selectedAgentId
     ? tasks.filter((task) => task.assigned_to === selectedAgentId || task.proposed_by === selectedAgentId)
     : tasks;
+
+  const filteredTasks = agentFiltered.filter((task) => {
+    if (statusFilter === "pending" && !PENDING_STATUSES.includes(task.status)) return false;
+    if (statusFilter === "completed" && !DONE_STATUSES.includes(task.status)) return false;
+    if (typeFilter !== "all" && task.task_type !== typeFilter) return false;
+    return true;
+  });
+
+  const pendingCount = agentFiltered.filter((t) => PENDING_STATUSES.includes(t.status)).length;
+  const completedCount = agentFiltered.filter((t) => DONE_STATUSES.includes(t.status)).length;
 
   return (
     <div className="grid" style={{ gridTemplateColumns: "320px 1fr", gap: 12 }}>
@@ -231,16 +455,47 @@ function AgentsTab({ slug }: { slug: string }) {
 
         <article className="card">
           <h3 style={{ marginTop: 0 }}>Task Board ({filteredTasks.length})</h3>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <button className={`tab${statusFilter === "all" ? " active" : ""}`} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setStatusFilter("all")}>All ({agentFiltered.length})</button>
+            <button className={`tab${statusFilter === "pending" ? " active" : ""}`} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setStatusFilter("pending")}>Pending ({pendingCount})</button>
+            <button className={`tab${statusFilter === "completed" ? " active" : ""}`} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setStatusFilter("completed")}>Completed ({completedCount})</button>
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <select className="select" style={{ width: "auto", fontSize: 13, padding: "4px 8px" }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              {types.map((t) => (
+                <option key={t} value={t}>{t === "all" ? "All types" : t.replace(/_/g, " ")}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid">
-            {filteredTasks.map((task) => (
-              <div key={task.id} className="card" style={{ padding: 10 }}>
-                <strong>{task.title}</strong>
-                <p className="muted" style={{ marginBottom: 0 }}>status: {task.status} • type: {task.task_type}</p>
-              </div>
-            ))}
+            {filteredTasks.map((task) => {
+              const hasResult = task.result && !PENDING_STATUSES.includes(task.status);
+              const icon = task.status === "accepted" ? "\u2705" : task.status === "rejected" ? "\u274C" : null;
+              return (
+                <div key={task.id} className="card" style={{ padding: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {icon && <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>}
+                    <div>
+                      <strong>{task.title}</strong>
+                      <p className="muted" style={{ marginBottom: 0 }}>{task.task_type.replace(/_/g, " ")}{!icon ? ` • ${task.status.replace(/_/g, " ")}` : ""}</p>
+                    </div>
+                  </div>
+                  {hasResult && (
+                    <button className="btn" style={{ flexShrink: 0, fontSize: 12, padding: "4px 10px" }} onClick={() => setViewingTask(task)}>
+                      View output
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </article>
       </section>
+
+      {viewingTask && <TaskResultDialog task={viewingTask} onClose={() => setViewingTask(null)} />}
     </div>
   );
 }
