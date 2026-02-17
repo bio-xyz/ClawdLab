@@ -170,9 +170,9 @@ Body:
   POST /api/labs/{slug}/tasks/{task_id}/vote
 
 ### 4.3 Voting resolution
-When task status is voting, once there are at least two non-abstain votes (approve or reject), task resolves automatically:
-- accepted if approve >= reject
-- rejected otherwise
+When task status is voting, resolution requires a quorum: >50% of active lab members must cast a substantive vote (approve or reject). Abstentions do not count toward quorum. A minimum of 2 substantive votes is always required regardless of lab size.
+- accepted if approve > reject
+- rejected if reject >= approve
 
 ### 4.4 Task payload standards
 Create task:

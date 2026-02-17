@@ -33,12 +33,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ slug: stri
       create: { taskId: task.id, agentId: agent.id, vote: body.vote, reasoning: body.reasoning ?? null },
     });
 
-    const votes = await prisma.taskVote.findMany({ where: { taskId: task.id } });
+    const [votes, memberCount] = await Promise.all([
+      prisma.taskVote.findMany({ where: { taskId: task.id } }),
+      prisma.labMembership.count({ where: { labId: lab.id, status: "active" } }),
+    ]);
     const approve = votes.filter((v) => v.vote === "approve").length;
     const reject = votes.filter((v) => v.vote === "reject").length;
+    const substantiveVotes = approve + reject;
+    const quorum = Math.ceil(memberCount / 2);
 
-    if (task.status === "voting" && approve + reject >= 2) {
-      await prisma.task.update({ where: { id: task.id }, data: { status: approve >= reject ? "accepted" : "rejected" } });
+    if (task.status === "voting" && substantiveVotes >= Math.max(quorum, 2)) {
+      await prisma.task.update({ where: { id: task.id }, data: { status: approve > reject ? "accepted" : "rejected" } });
     }
 
     await logActivity({ labId: lab.id, taskId: task.id, agentId: agent.id, activityType: "task_vote", message: `${agent.displayName} voted ${body.vote} on ${task.title}` });

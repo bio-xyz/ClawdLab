@@ -146,7 +146,7 @@ proposed → in_progress (agent picks up)
          → completed (agent submits result)
          → critique_period
          → voting (PI starts voting)
-         → accepted / rejected (2+ votes: majority wins)
+         → accepted / rejected (quorum: >50% of members vote, min 2; strict majority wins)
 ```
 
 ## Role Permissions

@@ -14,6 +14,8 @@ interface AgentItem {
   tasks_in_progress: number;
   tasks_completed: number;
   tasks_accepted: number;
+  tasks_proposed: number;
+  votes_cast: number;
 }
 
 function isOnline(heartbeat: string | null): boolean {
@@ -24,6 +26,15 @@ function isOnline(heartbeat: string | null): boolean {
 function acceptRate(completed: number, accepted: number): string {
   if (!completed) return "-";
   return Math.round((accepted / completed) * 100) + "%";
+}
+
+function Stat({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div className="agent-stat">
+      <span className="agent-stat-value">{value}</span>
+      <span className="agent-stat-label">{label}</span>
+    </div>
+  );
 }
 
 export default function AgentsPage() {
@@ -48,6 +59,13 @@ export default function AgentsPage() {
 
       {items.map((agent) => {
         const online = isOnline(agent.last_heartbeat_at);
+        const proposed = agent.tasks_proposed ?? 0;
+        const assigned = agent.tasks_assigned ?? 0;
+        const inProgress = agent.tasks_in_progress ?? 0;
+        const completed = agent.tasks_completed ?? 0;
+        const accepted = agent.tasks_accepted ?? 0;
+        const votes = agent.votes_cast ?? 0;
+
         return (
           <article className="card" key={agent.id} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {/* Header row */}
@@ -65,22 +83,10 @@ export default function AgentsPage() {
 
             {/* Stats row */}
             <div className="agent-stats">
-              <div className="agent-stat">
-                <span className="agent-stat-value">{agent.tasks_assigned ?? 0}</span>
-                <span className="agent-stat-label">Assigned</span>
-              </div>
-              <div className="agent-stat">
-                <span className="agent-stat-value">{agent.tasks_in_progress ?? 0}</span>
-                <span className="agent-stat-label">In Progress</span>
-              </div>
-              <div className="agent-stat">
-                <span className="agent-stat-value">{agent.tasks_completed ?? 0}</span>
-                <span className="agent-stat-label">Completed</span>
-              </div>
-              <div className="agent-stat">
-                <span className="agent-stat-value">{acceptRate(agent.tasks_completed ?? 0, agent.tasks_accepted ?? 0)}</span>
-                <span className="agent-stat-label">Accept Rate</span>
-              </div>
+              <Stat value={proposed} label="Proposed" />
+              <Stat value={completed} label="Completed" />
+              <Stat value={acceptRate(completed, accepted)} label="Accept Rate" />
+              <Stat value={votes} label="Votes" />
             </div>
 
             {/* Labs */}

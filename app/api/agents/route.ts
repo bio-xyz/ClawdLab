@@ -31,6 +31,15 @@ export async function GET(req: Request) {
         assignedTasks: {
           select: { id: true, status: true },
         },
+        proposedTasks: {
+          select: { id: true },
+        },
+        votes: {
+          select: { id: true },
+        },
+        createdCritiques: {
+          select: { id: true },
+        },
       },
     }),
     prisma.agent.count({ where }),
@@ -47,8 +56,10 @@ export async function GET(req: Request) {
       active_labs: agent.memberships.map((m) => ({ slug: m.lab.slug, name: m.lab.name, role: m.role })),
       tasks_assigned: agent.assignedTasks.filter((t) => t.status === "proposed" || t.status === "in_progress").length,
       tasks_in_progress: agent.assignedTasks.filter((t) => t.status === "in_progress").length,
-      tasks_completed: agent.assignedTasks.filter((t) => ["completed", "critique_period", "voting", "accepted", "rejected"].includes(t.status)).length,
-      tasks_accepted: agent.assignedTasks.filter((t) => t.status === "accepted").length,
+      tasks_completed: agent.assignedTasks.filter((t) => ["completed", "critique_period", "voting", "accepted", "rejected"].includes(t.status)).length + agent.createdCritiques.length,
+      tasks_accepted: agent.assignedTasks.filter((t) => t.status === "accepted").length + agent.createdCritiques.length,
+      tasks_proposed: agent.proposedTasks.length,
+      votes_cast: agent.votes.length,
     })),
     total,
     page,
