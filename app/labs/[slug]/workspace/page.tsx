@@ -6,24 +6,20 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { useCurrentUser } from "@/components/useCurrentUser";
-import {
-  LayoutDashboard, Bot, MessageSquare, FileText,
-  Users, ListPlus, Loader, Eye, CheckCircle, Clock,
-  Lightbulb, Target, BarChart3, Award, Activity,
-  CircleCheck, CircleX, CircleDot, CircleMinus,
-  MessageSquareMore, Vote, BookOpen, Microscope, FlaskConical,
-  ExternalLink, ListTodo, TrendingUp, MessageCircle, Send,
-  File, Download, X, ArrowLeft,
-} from "lucide-react";
 
-type WorkspaceTab = "overview" | "agents" | "discussion" | "docs";
+type WorkspaceTab = "overview" | "agents" | "discussion" | "documents";
 
-const TAB_ICONS: Record<WorkspaceTab, React.ReactNode> = {
-  overview: <LayoutDashboard size={16} />,
-  agents: <Bot size={16} />,
-  discussion: <MessageSquare size={16} />,
-  docs: <FileText size={16} />,
-};
+interface LabInfo {
+  name: string;
+  description: string | null;
+}
+
+interface Member {
+  agent_id: string;
+  display_name: string;
+  role: string;
+  heartbeat_at: string | null;
+}
 
 function usePolling(callback: () => void | Promise<void>, intervalMs: number, deps: unknown[] = []) {
   useEffect(() => {
@@ -37,9 +33,32 @@ function usePolling(callback: () => void | Promise<void>, intervalMs: number, de
 
 function resolveTab(raw: string | null): WorkspaceTab {
   if (!raw || raw === "workspace") return "overview";
-  if (raw === "overview" || raw === "agents" || raw === "discussion" || raw === "docs") return raw;
+  if (raw === "overview" || raw === "agents" || raw === "discussion" || raw === "documents") return raw;
+  if (raw === "docs") return "documents";
   return "overview";
 }
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+const ROLE_CLASS: Record<string, string> = {
+  pi: "role-pi",
+  skeptical_theorist: "role-theorist",
+  theorist: "role-theorist",
+  research_analyst: "role-experimentalist",
+  experimentalist: "role-experimentalist",
+  critic: "role-critic",
+  synthesizer: "role-synthesizer",
+  scout: "role-scout",
+};
 
 export default function LabWorkspacePage() {
   const params = useParams<{ slug: string }>();
@@ -49,47 +68,253 @@ export default function LabWorkspacePage() {
   const slug = params.slug;
   const tab = resolveTab(searchParams.get("tab"));
 
+  const [labInfo, setLabInfo] = useState<LabInfo | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/labs/${slug}`).then(async (res) => {
+      if (res.ok) setLabInfo(await res.json());
+    });
+  }, [slug]);
+
+  usePolling(async () => {
+    const res = await fetch(`/api/labs/${slug}/members`);
+    if (res.ok) setMembers(await res.json());
+  }, 10000, [slug]);
+
   const setTab = (next: WorkspaceTab) => {
     const qs = new URLSearchParams(searchParams.toString());
     qs.set("tab", next);
     router.replace(`/labs/${slug}/workspace?${qs.toString()}`);
   };
 
+  const labTitle = labInfo?.name || slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
   return (
-    <div className="grid" style={{ gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div className="tabs" style={{ margin: 0 }}>
-          {(["overview", "agents", "discussion", "docs"] as WorkspaceTab[]).map((entry) => (
-            <button key={entry} className={`tab ${tab === entry ? "active" : ""}`} onClick={() => setTab(entry)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{TAB_ICONS[entry]}{entry[0].toUpperCase() + entry.slice(1)}</button>
-          ))}
+    <div className="workspace-shell">
+      <header className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22 }}>{labTitle}</h1>
+          {labInfo?.description && (
+            <p className="muted" style={{ marginBottom: 0, marginTop: 4, fontSize: 14 }}>{labInfo.description}</p>
+          )}
         </div>
-        <span className="muted" style={{ fontSize: 13 }}>{slug}</span>
+        <Link className="btn" href="/forum">Back to forum</Link>
+      </header>
+
+      <div className="tabs">
+        {(["overview", "agents", "discussion", "documents"] as WorkspaceTab[]).map((entry) => (
+          <button key={entry} className={`tab ${tab === entry ? "active" : ""}`} onClick={() => setTab(entry)}>{entry[0].toUpperCase() + entry.slice(1)}</button>
+        ))}
       </div>
 
-      {tab === "overview" && <OverviewTab slug={slug} />}
-      {tab === "agents" && <AgentsTab slug={slug} />}
-      {tab === "discussion" && <DiscussionTab slug={slug} />}
-      {tab === "docs" && <DocsTab slug={slug} />}
+      <div className="workspace-content">
+        {tab === "overview" && <OverviewTab slug={slug} />}
+        {tab === "agents" && <AgentsTab slug={slug} />}
+        {tab === "discussion" && <DiscussionTab slug={slug} members={members} />}
+        {tab === "documents" && <DocsTab slug={slug} />}
+      </div>
+    </div>
+  );
+}
+
+interface LabState {
+  id: string;
+  version: number;
+  title: string;
+  hypothesis: string | null;
+  objectives: string[];
+  status: string;
+  conclusion_summary: string | null;
+  activated_at: string | null;
+  concluded_at: string | null;
+  created_at: string;
+}
+
+const STATE_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  draft:                   { label: "Draft",         color: "#6b7280", bg: "rgba(107,114,128,0.1)" },
+  active:                  { label: "Active",        color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
+  concluded_proven:        { label: "Proven",        color: "#10b981", bg: "rgba(16,185,129,0.1)" },
+  concluded_disproven:     { label: "Disproven",     color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
+  concluded_pivoted:       { label: "Pivoted",       color: "#f59e0b", bg: "rgba(245,158,11,0.1)" },
+  concluded_inconclusive:  { label: "Inconclusive",  color: "#6b7280", bg: "rgba(107,114,128,0.1)" },
+};
+
+function LabStateBadge({ status }: { status: string }) {
+  const config = STATE_STATUS_CONFIG[status] || { label: status.replace(/_/g, " "), color: "var(--muted)", bg: "rgba(107,114,128,0.1)" };
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: config.bg, color: config.color }}>
+      {config.label}
+    </span>
+  );
+}
+
+interface StateItem {
+  id: string;
+  title: string;
+  status: string;
+  task_type: string;
+  verification_score: number | null;
+  reference_count: number;
+  proposed_by: string;
+  assigned_to: string | null;
+  description: string | null;
+  current_summary: string | null;
+  evidence: { type: string; description: string; agent: string; day_label: string | null }[];
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  result: Record<string, unknown> | null;
+}
+
+const ITEM_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  established: { label: "Established", color: "#22c55e" },
+  under_investigation: { label: "Under Investigation", color: "#f59e0b" },
+  contested: { label: "Contested", color: "#ef4444" },
+  proposed: { label: "Proposed", color: "#3b82f6" },
+  rejected: { label: "Rejected", color: "#ef4444" },
+  superseded: { label: "Superseded", color: "#6b7280" },
+};
+
+function scoreColor(score: number | null): string {
+  if (score === null) return "var(--muted)";
+  if (score >= 0.85) return "#22c55e";
+  if (score >= 0.70) return "#f59e0b";
+  return "#ef4444";
+}
+
+function journeyHeader(status: string): string {
+  if (status === "established") return "Research Journey";
+  if (status === "under_investigation") return "Progress so far";
+  if (status === "contested") return "Debate timeline";
+  if (status === "proposed") return "Proposal details";
+  return "Evidence";
+}
+
+function ItemStatusIcon({ status }: { status: string }) {
+  const s = { width: 14, height: 14 };
+  if (status === "established") return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={s}>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4 12 14.01l-3-3" />
+    </svg>
+  );
+  if (status === "under_investigation") return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={s}>
+      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+  if (status === "contested") return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={s}>
+      <path d="m17 14 4-4m0 0-4-4m4 4H3" /><path d="m7 10-4 4m0 0 4 4m-4-4h18" />
+    </svg>
+  );
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={s}>
+      <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+      <path d="M9 18h6" /><path d="M10 22h4" />
+    </svg>
+  );
+}
+
+function StateItemRow({ item }: { item: StateItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const statusCfg = ITEM_STATUS_CONFIG[item.status] || ITEM_STATUS_CONFIG.proposed;
+
+  return (
+    <div className="ls-item">
+      <button className="ls-item-row" onClick={() => setExpanded(!expanded)}>
+        <span className="ls-item-status" style={{ color: statusCfg.color }}>
+          <ItemStatusIcon status={item.status} />
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: 13, fontWeight: 500, display: "block" }}>{item.title}</span>
+          {item.current_summary && !expanded && (
+            <span style={{ fontSize: 11, color: "var(--muted)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.current_summary}
+            </span>
+          )}
+        </div>
+        {item.verification_score !== null && (
+          <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 600, color: scoreColor(item.verification_score) }}>
+            {(item.verification_score * 100).toFixed(0)}%
+          </span>
+        )}
+        <span className="muted" style={{ fontSize: 11 }}>{item.reference_count} refs</span>
+        <span className="ls-item-type">{item.task_type.replace(/_/g, " ")}</span>
+        <span style={{ fontSize: 14, color: "var(--muted)", transition: "transform 0.15s", transform: expanded ? "rotate(180deg)" : "rotate(0)" }}>&#9662;</span>
+      </button>
+
+      {expanded && (
+        <div className="ls-item-detail">
+          {item.description && <p style={{ margin: "0 0 8px", fontSize: 13 }}>{item.description}</p>}
+
+          {item.evidence.length > 0 && (
+            <>
+              <h4 style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                {journeyHeader(item.status)}
+              </h4>
+              <div className="ls-evidence">
+                {item.evidence.map((ev, i) => (
+                  <div key={i} className="ls-evidence-entry">
+                    {ev.day_label && <span className="ls-evidence-day">{ev.day_label}</span>}
+                    <span className="ls-evidence-type">{ev.type}</span>
+                    <span style={{ flex: 1, fontSize: 12, color: "var(--muted)" }}>{ev.description}</span>
+                    <span style={{ fontSize: 10, fontStyle: "italic", color: "var(--muted)", opacity: 0.7, flexShrink: 0 }}>{ev.agent}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {item.evidence.length === 0 && (
+            <p style={{ fontSize: 12, fontStyle: "italic", color: "var(--muted)" }}>No evidence yet</p>
+          )}
+
+          {item.result && (
+            <details style={{ fontSize: 12, marginTop: 8 }}>
+              <summary style={{ cursor: "pointer", color: "var(--accent)", fontWeight: 500, marginBottom: 4 }}>View Result</summary>
+              <pre style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, padding: 10, overflow: "auto", maxHeight: 200, fontSize: 11, whiteSpace: "pre-wrap" }}>
+                {JSON.stringify(item.result, null, 2)}
+              </pre>
+            </details>
+          )}
+
+          <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--muted)", marginTop: 8 }}>
+            {item.created_at && <span>Created {timeAgo(item.created_at)}</span>}
+            {item.started_at && <span>Started {timeAgo(item.started_at)}</span>}
+            {item.completed_at && <span>Completed {timeAgo(item.completed_at)}</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function OverviewTab({ slug }: { slug: string }) {
-  const [stats, setStats] = useState<any>(null);
-  const [members, setMembers] = useState<any[]>([]);
-  const [docs, setDocs] = useState<any[]>([]);
-  const [activity, setActivity] = useState<any[]>([]);
-  const [labStates, setLabStates] = useState<any[]>([]);
-  const [stateTasks, setStateTasks] = useState<any[]>([]);
+  const [stats, setStats] = useState<Record<string, number> | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [docs, setDocs] = useState<{ id: string }[]>([]);
+  const [activity, setActivity] = useState<{ created_at: string }[]>([]);
+  const [labStates, setLabStates] = useState<LabState[]>([]);
+  const [expandedStateId, setExpandedStateId] = useState<string | null>(null);
+  const [stateDetails, setStateDetails] = useState<Record<string, { items: StateItem[] }>>({});
+
+  const loadStateDetail = async (stateId: string) => {
+    if (stateDetails[stateId]) return;
+    const res = await fetch(`/api/labs/${slug}/lab-states/${stateId}`);
+    if (res.ok) {
+      const detail = await res.json();
+      setStateDetails((prev) => ({ ...prev, [stateId]: { items: detail.items || [] } }));
+    }
+  };
 
   usePolling(async () => {
-    const [statsRes, membersRes, docsRes, activityRes, statesRes, stateTasksRes] = await Promise.all([
+    const [statsRes, membersRes, docsRes, activityRes, statesRes] = await Promise.all([
       fetch(`/api/labs/${slug}/stats`),
       fetch(`/api/labs/${slug}/members`),
       fetch(`/api/labs/${slug}/docs?per_page=200`),
       fetch(`/api/labs/${slug}/activity?per_page=10`),
       fetch(`/api/labs/${slug}/lab-states`),
-      fetch(`/api/labs/${slug}/lab-state?per_page=50`),
     ]);
 
     if (statsRes.ok) setStats(await statsRes.json());
@@ -97,7 +322,6 @@ function OverviewTab({ slug }: { slug: string }) {
     if (docsRes.ok) setDocs((await docsRes.json()).items || []);
     if (activityRes.ok) setActivity((await activityRes.json()).items || []);
     if (statesRes.ok) setLabStates(await statesRes.json());
-    if (stateTasksRes.ok) setStateTasks(await stateTasksRes.json());
   }, 10000, [slug]);
 
   const onlineCount = useMemo(() => {
@@ -108,372 +332,194 @@ function OverviewTab({ slug }: { slug: string }) {
     }).length;
   }, [members]);
 
+  const activeState = labStates.find((s) => s.status === "active");
+
+  // Auto-load items for the active state
+  useEffect(() => {
+    if (activeState) loadStateDetail(activeState.id);
+  }, [activeState?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div className="grid" style={{ gap: 12 }}>
+    <div className="grid" style={{ gap: 12, overflowX: "hidden", overflowY: "auto" }}>
       <section className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Overview</h2>
-          <Link className="btn" href="/forum" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}><ArrowLeft size={14} /> Back to forum</Link>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h2 style={{ marginTop: 0, marginBottom: 2 }}>Overview</h2>
+            <p className="muted" style={{ margin: "0 0 8px", fontSize: 13 }}>Live snapshot of lab activity, task progress, and current research state.</p>
+          </div>
+          <span className="muted" style={{ fontSize: 13 }}>polling: 10s</span>
         </div>
 
-        <div className="card" style={{ background: "#ecfeff", borderColor: "#a5f3fc", minHeight: 120, position: "relative", overflow: "hidden" }}>
-          <p style={{ marginTop: 0, fontWeight: 600 }}>Live Lab Animation (lightweight)</p>
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+        <div className="card hero-anim" style={{ minHeight: 100, position: "relative", overflow: "hidden" }}>
+          <div className="hero-anim-bg">
             {[0, 1, 2, 3].map((idx) => (
-              <span
-                key={idx}
-                style={{
-                  position: "absolute",
-                  left: `${10 + idx * 22}%`,
-                  top: `${20 + (idx % 2) * 28}%`,
-                  width: 12,
-                  height: 12,
-                  borderRadius: "999px",
-                  background: "#0f766e",
-                  opacity: 0.7,
-                  animation: `pulse${idx} 2.2s ease-in-out ${idx * 0.2}s infinite`,
-                }}
-              />
+              <span key={idx} className="hero-dot" />
             ))}
           </div>
+          <p style={{ marginTop: 0, fontWeight: 600, position: "relative" }}>Live Lab Activity</p>
+          <p className="muted" style={{ marginBottom: 0, position: "relative", fontSize: 13 }}>
+            {onlineCount} agent{onlineCount !== 1 ? "s" : ""} online
+          </p>
         </div>
       </section>
 
       <section className="metric-grid">
-        <Metric icon={<Users size={14} />} label="Members online" value={onlineCount} />
-        <Metric icon={<ListPlus size={14} />} label="Tasks proposed" value={stats?.proposed || 0} />
-        <Metric icon={<Loader size={14} />} label="Tasks in progress" value={stats?.in_progress || 0} />
-        <Metric icon={<Eye size={14} />} label="Tasks review" value={(stats?.completed || 0) + (stats?.critique_period || 0) + (stats?.voting || 0)} />
-        <Metric icon={<CheckCircle size={14} />} label="Tasks resolved" value={(stats?.accepted || 0) + (stats?.rejected || 0) + (stats?.superseded || 0)} />
-        <Metric icon={<FileText size={14} />} label="Docs count" value={docs.length} />
-        <Metric icon={<Clock size={14} />} label="Last activity" value={activity[0]?.created_at ? new Date(activity[0].created_at).toLocaleString() : "—"} smallValue />
+        <div className="metric"><div className="metric-label">Members online</div><div className="metric-value">{onlineCount}</div></div>
+        <div className="metric"><div className="metric-label">Tasks proposed</div><div className="metric-value">{stats?.proposed || 0}</div></div>
+        <div className="metric"><div className="metric-label">Tasks in progress</div><div className="metric-value">{stats?.in_progress || 0}</div></div>
+        <div className="metric"><div className="metric-label">Tasks review</div><div className="metric-value">{(stats?.completed || 0) + (stats?.critique_period || 0) + (stats?.voting || 0)}</div></div>
+        <div className="metric"><div className="metric-label">Tasks resolved</div><div className="metric-value">{(stats?.accepted || 0) + (stats?.rejected || 0) + (stats?.superseded || 0)}</div></div>
+        <div className="metric"><div className="metric-label">Docs count</div><div className="metric-value">{docs.length}</div></div>
+        <div className="metric"><div className="metric-label">Last activity</div><div className="metric-value" style={{ fontSize: 13 }}>{activity[0]?.created_at ? new Date(activity[0].created_at).toLocaleString() : "—"}</div></div>
       </section>
 
-      <LabStateSection labStates={labStates} stateTasks={stateTasks} activity={activity} />
-
-      <style jsx>{`
-        @keyframes pulse0 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-8px);} }
-        @keyframes pulse1 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(7px);} }
-        @keyframes pulse2 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-6px);} }
-        @keyframes pulse3 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(8px);} }
-      `}</style>
-    </div>
-  );
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  active: "Active",
-  concluded_proven: "Proven",
-  concluded_disproven: "Disproven",
-  concluded_pivoted: "Pivoted",
-  concluded_inconclusive: "Inconclusive",
-};
-
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  draft: { bg: "#f1f5f9", text: "#64748b" },
-  active: { bg: "#ccfbf1", text: "#0f766e" },
-  concluded_proven: { bg: "#dcfce7", text: "#16a34a" },
-  concluded_disproven: { bg: "#fee2e2", text: "#dc2626" },
-  concluded_pivoted: { bg: "#fef3c7", text: "#d97706" },
-  concluded_inconclusive: { bg: "#f1f5f9", text: "#64748b" },
-};
-
-function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]; stateTasks: any[]; activity: any[] }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [innerTab, setInnerTab] = useState<"overview" | "activity">("overview");
-
-  const active = labStates.find((s) => s.status === "active");
-  const current = selectedId ? labStates.find((s) => s.id === selectedId) : (active || labStates[0]);
-
-  if (labStates.length === 0) {
-    return (
+      {/* Lab State */}
       <section className="card">
-        <h3 style={{ marginTop: 0 }}>Research State</h3>
-        <p className="muted">No research state defined yet. A PI agent will create one.</p>
-      </section>
-    );
-  }
-
-  const tasksByStatus = (tasks: any[]) => {
-    const resolved = tasks.filter((t) => ["accepted", "rejected", "superseded"].includes(t.status)).length;
-    const inReview = tasks.filter((t) => ["completed", "critique_period", "voting"].includes(t.status)).length;
-    const inProgress = tasks.filter((t) => t.status === "in_progress").length;
-    const proposed = tasks.filter((t) => t.status === "proposed").length;
-    return { resolved, inReview, inProgress, proposed, total: tasks.length };
-  };
-
-  const isViewingActive = current?.id === active?.id;
-  const counts = isViewingActive ? tasksByStatus(stateTasks) : null;
-  const colors = STATUS_COLORS[current?.status] || STATUS_COLORS.draft;
-
-  return (
-    <section className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ margin: 0 }}>Research State</h3>
-        <span style={{ fontSize: 12, color: "var(--muted)" }}>v{current?.version}</span>
-      </div>
-
-      {/* State version tabs */}
-      {labStates.length > 1 && (
-        <div className="tabs" style={{ marginBottom: 0 }}>
-          {labStates.map((s) => (
-            <button
-              key={s.id}
-              className={`tab${current?.id === s.id ? " active" : ""}`}
-              onClick={() => { setSelectedId(s.id); setInnerTab("overview"); }}
-            >
-              {s.status === "active" ? "Current" : `v${s.version}`}
-            </button>
-          ))}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>Lab State</h3>
+          <span className="muted" style={{ fontSize: 12 }}>{labStates.length} state{labStates.length !== 1 ? "s" : ""}</span>
         </div>
-      )}
 
-      {/* Inner tabs: Overview / Activity */}
-      <div className="tabs" style={{ marginBottom: 0 }}>
-        <button className={`tab${innerTab === "overview" ? " active" : ""}`} onClick={() => setInnerTab("overview")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <LayoutDashboard size={16} /> Overview
-        </button>
-        <button className={`tab${innerTab === "activity" ? " active" : ""}`} onClick={() => setInnerTab("activity")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Activity size={16} /> Recent Activity
-        </button>
-      </div>
+        {labStates.length === 0 && <p className="muted">No research states yet. The PI agent creates the first state.</p>}
 
-      {innerTab === "overview" && (
-        <>
-          {/* Status badge + title */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{
-              background: colors.bg,
-              color: colors.text,
-              fontSize: 11,
-              fontWeight: 600,
-              padding: "2px 8px",
-              borderRadius: 6,
-              textTransform: "uppercase",
-              letterSpacing: 0.5,
-            }}>
-              {STATUS_LABELS[current?.status] || current?.status}
-            </span>
-            <strong style={{ fontSize: 16 }}>{current?.title}</strong>
-          </div>
+        {labStates.map((state) => {
+          const isActive = state.status === "active";
+          const isExpanded = expandedStateId === state.id || isActive;
+          const detail = stateDetails[state.id];
 
-          {/* Hypothesis */}
-          {current?.hypothesis && (
-            <div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Lightbulb size={14} /> Hypothesis</div>
-              <p style={{ margin: 0, fontStyle: "italic" }}>{current.hypothesis}</p>
-            </div>
-          )}
+          return (
+            <div key={state.id} style={{ marginBottom: 8 }}>
+              {/* State header */}
+              <button
+                onClick={() => {
+                  if (isActive) return;
+                  const next = expandedStateId === state.id ? null : state.id;
+                  setExpandedStateId(next);
+                  if (next) loadStateDetail(next);
+                }}
+                className={isActive ? "lab-state-hero" : ""}
+                style={{
+                  width: "100%", textAlign: "left", cursor: isActive ? "default" : "pointer", color: "var(--text)",
+                  ...(isActive
+                    ? {}
+                    : { background: "none", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px" }
+                  ),
+                }}
+              >
+                <div className="lab-state-hero-header">
+                  <span className="lab-state-version">v{state.version}</span>
+                  <LabStateBadge status={state.status} />
+                  <span style={{ flex: 1, fontWeight: 600, fontSize: isActive ? 15 : 14 }}>{state.title}</span>
+                  {detail && <span className="muted" style={{ fontSize: 11 }}>{detail.items.length} item{detail.items.length !== 1 ? "s" : ""}</span>}
+                  {!isActive && (
+                    <span style={{ fontSize: 16, color: "var(--muted)", transition: "transform 0.15s", transform: isExpanded ? "rotate(180deg)" : "rotate(0)" }}>&#9662;</span>
+                  )}
+                </div>
+                {isActive && state.hypothesis && (
+                  <p style={{ margin: "8px 0 0", fontSize: 13, fontStyle: "italic", color: "var(--muted)" }}>
+                    Hypothesis: {state.hypothesis}
+                  </p>
+                )}
+                {isActive && state.objectives.length > 0 && (
+                  <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
+                    {state.objectives.map((obj, i) => <li key={i} style={{ marginBottom: 2 }}>{obj}</li>)}
+                  </ul>
+                )}
+              </button>
 
-          {/* Objectives */}
-          {current?.objectives && (current.objectives as string[]).length > 0 && (
-            <div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Target size={14} /> Objectives</div>
-              <ul style={{ margin: 0, paddingLeft: 20 }}>
-                {(current.objectives as string[]).map((obj: string, i: number) => (
-                  <li key={i} style={{ marginBottom: 4 }}>{obj}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Task progress for active state */}
-          {isViewingActive && counts && counts.total > 0 && (
-            <div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><BarChart3 size={14} /> Task Progress</div>
-              <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: "var(--border)" }}>
-                {counts.resolved > 0 && <div style={{ width: `${(counts.resolved / counts.total) * 100}%`, background: "#16a34a" }} />}
-                {counts.inReview > 0 && <div style={{ width: `${(counts.inReview / counts.total) * 100}%`, background: "#f59e0b" }} />}
-                {counts.inProgress > 0 && <div style={{ width: `${(counts.inProgress / counts.total) * 100}%`, background: "#3b82f6" }} />}
-              </div>
-              <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
-                <span>{counts.resolved} resolved</span>
-                <span>{counts.inReview} in review</span>
-                <span>{counts.inProgress} in progress</span>
-                <span>{counts.proposed} proposed</span>
-              </div>
-            </div>
-          )}
-
-          {/* Conclusion for concluded states */}
-          {current?.conclusion_summary && (
-            <div style={{ background: colors.bg, borderRadius: 10, padding: 12 }}>
-              <div style={{ fontSize: 12, color: colors.text, fontWeight: 600, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Award size={14} /> Conclusion</div>
-              <p style={{ margin: 0 }}>{current.conclusion_summary}</p>
-            </div>
-          )}
-        </>
-      )}
-
-      {innerTab === "activity" && (
-        <div>
-          {activity.length === 0 ? (
-            <p className="muted">No recent activity.</p>
-          ) : (
-            <div className="grid" style={{ gap: 0 }}>
-              {activity.slice(0, 5).map((item, idx) => {
-                // Strip agent name prefix from message if present
-                const agentName = item.agent_name;
-                const msg = agentName && item.message.startsWith(agentName)
-                  ? item.message.slice(agentName.length).replace(/^[\s:]+/, "")
-                  : item.message;
-                return (
-                  <div key={idx} style={{ padding: "10px 0", borderBottom: idx < Math.min(activity.length, 5) - 1 ? "1px solid var(--border)" : "none" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <Activity size={14} style={{ color: "var(--muted)", flexShrink: 0 }} />
-                        {agentName && <strong style={{ fontSize: 13 }}>{agentName}</strong>}
-                        <span style={{ fontSize: 11, color: "var(--muted)" }}>{item.activity_type.replace(/_/g, " ")}</span>
-                      </div>
-                      <span style={{ fontSize: 11, color: "var(--muted)" }}>{new Date(item.created_at).toLocaleString()}</span>
+              {/* Expanded content */}
+              {isExpanded && (
+                <div style={{ marginTop: 6 }}>
+                  {/* Hypothesis + objectives for non-active states */}
+                  {!isActive && state.hypothesis && (
+                    <p style={{ margin: "0 0 6px", fontSize: 13, fontStyle: "italic", color: "var(--muted)", paddingLeft: 12 }}>
+                      Hypothesis: {state.hypothesis}
+                    </p>
+                  )}
+                  {!isActive && state.objectives.length > 0 && (
+                    <ul style={{ margin: "0 0 8px", paddingLeft: 28, fontSize: 13 }}>
+                      {state.objectives.map((obj, i) => <li key={i} style={{ marginBottom: 2 }}>{obj}</li>)}
+                    </ul>
+                  )}
+                  {state.conclusion_summary && (
+                    <p style={{ margin: "0 0 8px", fontSize: 13, paddingLeft: 12 }}>
+                      <strong>Conclusion:</strong> {state.conclusion_summary}
+                    </p>
+                  )}
+                  {!isActive && state.activated_at && (
+                    <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--muted)", paddingLeft: 12, marginBottom: 8 }}>
+                      <span>Activated {timeAgo(state.activated_at)}</span>
+                      {state.concluded_at && <span>Concluded {timeAgo(state.concluded_at)}</span>}
                     </div>
-                    <p style={{ margin: "4px 0 0", fontSize: 14 }}>{msg}</p>
-                  </div>
-                );
-              })}
+                  )}
+
+                  {/* Items list */}
+                  {!detail && <p className="muted" style={{ padding: "8px 12px", fontSize: 13 }}>Loading items...</p>}
+                  {detail && detail.items.length === 0 && <p className="muted" style={{ padding: "8px 12px", fontSize: 13 }}>No items in this state yet.</p>}
+                  {detail && detail.items.length > 0 && (
+                    <div className="ls-items-container">
+                      {detail.items.map((item) => (
+                        <StateItemRow key={item.id} item={item} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function resultToMarkdown(result: any): string {
-  if (!result) return "*No output recorded.*";
-  if (typeof result === "string") return result;
-  // Structured result — render key fields as markdown
-  const parts: string[] = [];
-  if (result.summary) parts.push(result.summary);
-  if (result.methodology) parts.push(`## Methodology\n${result.methodology}`);
-  if (result.findings) parts.push(`## Findings\n${result.findings}`);
-  if (result.key_findings?.length) parts.push(`## Key Findings\n${result.key_findings.map((f: string) => `- ${f}`).join("\n")}`);
-  if (result.gaps_identified?.length) parts.push(`## Gaps Identified\n${result.gaps_identified.map((g: string) => `- ${g}`).join("\n")}`);
-  if (result.conclusions?.length) parts.push(`## Conclusions\n${result.conclusions.map((c: string) => `- ${c}`).join("\n")}`);
-  if (result.open_questions?.length) parts.push(`## Open Questions\n${result.open_questions.map((q: string) => `- ${q}`).join("\n")}`);
-  if (result.limitations?.length) parts.push(`## Limitations\n${result.limitations.map((l: string) => `- ${l}`).join("\n")}`);
-  if (result.next_steps?.length) parts.push(`## Next Steps\n${result.next_steps.map((s: string) => `- ${s}`).join("\n")}`);
-  if (result.papers?.length) {
-    parts.push(`## Papers (${result.papers.length})\n${result.papers.map((p: any) => `- **${p.title}** (${p.year || "n/a"})${p.url ? ` — [link](${p.url})` : ""}`).join("\n")}`);
-  }
-  if (result.document_title) parts.push(`## Document\n**${result.document_title}**${result.logical_path ? ` — \`${result.logical_path}\`` : ""}`);
-  if (parts.length === 0) parts.push("```json\n" + JSON.stringify(result, null, 2) + "\n```");
-  return parts.join("\n\n");
-}
-
-function TaskDetailDialog({ task, members, onClose }: { task: any; members: any[]; onClose: () => void }) {
-  const agentName = (id: string | null) => {
-    if (!id) return "—";
-    const m = members.find((m) => m.agent_id === id);
-    return m?.display_name || id.slice(0, 8);
-  };
-
-  const statusColors: Record<string, string> = {
-    accepted: "#16a34a", rejected: "#dc2626", in_progress: "#3b82f6",
-    proposed: "#9ca3af", critique_period: "#d97706", voting: "#d97706",
-    completed: "#d97706", superseded: "#9ca3af",
-  };
-
-  const typeIcons: Record<string, React.ReactNode> = {
-    literature_review: <BookOpen size={16} />,
-    analysis: <BarChart3 size={16} />,
-    deep_research: <Microscope size={16} />,
-    critique: <MessageSquareMore size={16} />,
-    synthesis: <FlaskConical size={16} />,
-  };
-
-  const hasResult = task.result != null;
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
-      <div className="card" style={{ maxWidth: 860, width: "100%", maxHeight: "85vh", overflow: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ margin: "0 0 6px" }}>{task.title}</h3>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{
-                background: statusColors[task.status] || "#9ca3af",
-                color: "#fff",
-                fontSize: 11, fontWeight: 600,
-                padding: "2px 8px", borderRadius: 6,
-                textTransform: "uppercase", letterSpacing: 0.5,
-              }}>{task.status.replace(/_/g, " ")}</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, color: "var(--muted)" }}>
-                {typeIcons[task.task_type]}{task.task_type.replace(/_/g, " ")}
-              </span>
-            </div>
-          </div>
-          <button className="btn" onClick={onClose} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><X size={14} /> Close</button>
-        </div>
-
-        {/* Meta grid */}
-        <div style={{ padding: "14px 24px", borderBottom: "1px solid var(--border)", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px 20px" }}>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Proposed by</div>
-            <div style={{ fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}><Bot size={14} /> {agentName(task.proposed_by)}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Assigned to</div>
-            <div style={{ fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}><Bot size={14} /> {agentName(task.assigned_to)}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Created</div>
-            <div style={{ fontSize: 13 }}>{task.created_at ? new Date(task.created_at).toLocaleString() : "—"}</div>
-          </div>
-          {task.started_at && (
-            <div>
-              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Started</div>
-              <div style={{ fontSize: 13 }}>{new Date(task.started_at).toLocaleString()}</div>
-            </div>
-          )}
-          {task.completed_at && (
-            <div>
-              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Completed</div>
-              <div style={{ fontSize: 13 }}>{new Date(task.completed_at).toLocaleString()}</div>
-            </div>
-          )}
-          {task.verification_score != null && (
-            <div>
-              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Verification score</div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{task.verification_score}</div>
-            </div>
-          )}
-        </div>
-
-        {/* Description */}
-        {task.description && (
-          <div style={{ padding: "14px 24px", borderBottom: "1px solid var(--border)" }}>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Description</div>
-            <div className="discussion-body"><ReactMarkdown>{task.description}</ReactMarkdown></div>
-          </div>
-        )}
-
-        {/* Result */}
-        {hasResult && (
-          <div style={{ padding: "14px 24px" }}>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Output</div>
-            <div className="discussion-body"><ReactMarkdown>{resultToMarkdown(task.result)}</ReactMarkdown></div>
-          </div>
-        )}
-
-        {!task.description && !hasResult && (
-          <div style={{ padding: "24px", textAlign: "center" }}>
-            <p className="muted">No description or output yet.</p>
-          </div>
-        )}
-      </div>
+          );
+        })}
+      </section>
     </div>
   );
 }
+
+interface TaskItem {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  task_type: string;
+  assigned_to: string | null;
+  proposed_by: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  verification_score: number | null;
+  result: Record<string, unknown> | null;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  pi: "Principal Investigator (PI)",
+  skeptical_theorist: "Skeptical Theorist",
+  research_analyst: "Research Analyst",
+  synthesizer: "Synthesizer",
+  scout: "Scout",
+  critic: "Critic",
+  theorist: "Theorist",
+  experimentalist: "Experimentalist",
+};
+
+function formatRole(role: string): string {
+  return ROLE_LABELS[role] || role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  proposed: "#6b7280",
+  in_progress: "#3b82f6",
+  completed: "#8b5cf6",
+  critique_period: "#f59e0b",
+  voting: "#f59e0b",
+  accepted: "#22c55e",
+  rejected: "#ef4444",
+  superseded: "#6b7280",
+};
 
 function AgentsTab({ slug }: { slug: string }) {
-  const [members, setMembers] = useState<any[]>([]);
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [activity, setActivity] = useState<any[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [activity, setActivity] = useState<{ agent_id: string | null; created_at: string }[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [viewingTask, setViewingTask] = useState<any | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
   usePolling(async () => {
     const [membersRes, tasksRes, activityRes] = await Promise.all([
@@ -488,7 +534,7 @@ function AgentsTab({ slug }: { slug: string }) {
   }, 10000, [slug]);
 
   const agentStats = useMemo(() => {
-    const byAgent = new Map<string, any>();
+    const byAgent = new Map<string, { tasks_assigned: number; tasks_in_progress: number; tasks_completed: number; accepted_rate_percent: number; last_activity: string | null }>();
     for (const member of members) {
       const assigned = tasks.filter((task) => task.assigned_to === member.agent_id);
       const inProgress = assigned.filter((task) => task.status === "in_progress").length;
@@ -506,163 +552,154 @@ function AgentsTab({ slug }: { slug: string }) {
     return byAgent;
   }, [members, tasks, activity]);
 
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-
-  const DONE_STATUSES = ["completed", "critique_period", "voting", "accepted", "rejected", "superseded"];
-  const PENDING_STATUSES = ["proposed", "in_progress"];
-  const types = ["all", "literature_review", "analysis", "deep_research", "critique", "synthesis"];
-
-  const agentFiltered = selectedAgentId
+  const filteredTasks = selectedAgentId
     ? tasks.filter((task) => task.assigned_to === selectedAgentId || task.proposed_by === selectedAgentId)
     : tasks;
 
-  const filteredTasks = agentFiltered.filter((task) => {
-    if (statusFilter === "pending" && !PENDING_STATUSES.includes(task.status)) return false;
-    if (statusFilter === "completed" && !DONE_STATUSES.includes(task.status)) return false;
-    if (typeFilter !== "all" && task.task_type !== typeFilter) return false;
-    return true;
-  });
-
-  const pendingCount = agentFiltered.filter((t) => PENDING_STATUSES.includes(t.status)).length;
-  const completedCount = agentFiltered.filter((t) => DONE_STATUSES.includes(t.status)).length;
+  const agentName = (id: string) => members.find((m) => m.agent_id === id)?.display_name || id.slice(0, 8);
 
   return (
-    <div className="grid" style={{ gridTemplateColumns: "320px 1fr", gap: 12 }}>
-      <aside className="card" style={{ maxHeight: 760, overflow: "auto" }}>
+    <div className="workspace-split">
+      <aside className="card">
         <h3 style={{ marginTop: 0 }}>Agents</h3>
-        <button className="btn" style={{ width: "100%", marginBottom: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }} onClick={() => setSelectedAgentId(null)}><Users size={14} /> All agents</button>
-        <div className="grid">
-          {members.map((member) => (
-            <button key={member.agent_id} className="card" style={{ textAlign: "left", cursor: "pointer", borderColor: selectedAgentId === member.agent_id ? "#0f766e" : "#e5e7eb" }} onClick={() => setSelectedAgentId(member.agent_id)}>
-              <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><Bot size={14} /> {member.display_name}</strong>
-              <p className="muted" style={{ marginBottom: 0 }}>role: {member.role}</p>
-            </button>
-          ))}
+        <p className="muted" style={{ margin: "0 0 10px", fontSize: 12 }}>Lab members and their roles. Select an agent to view metrics and tasks.</p>
+        <button className="btn" style={{ width: "100%", marginBottom: 10 }} onClick={() => setSelectedAgentId(null)}>All Agents</button>
+        <div className="grid" style={{ gap: 8 }}>
+          {members.map((member) => {
+            const isOnline = member.heartbeat_at && (Date.now() - new Date(member.heartbeat_at).getTime() <= 5 * 60 * 1000);
+            return (
+              <button
+                key={member.agent_id}
+                className="card"
+                style={{ textAlign: "left", cursor: "pointer", padding: 10, borderColor: selectedAgentId === member.agent_id ? "var(--accent)" : "var(--border)", color: "var(--text)" }}
+                onClick={() => setSelectedAgentId(member.agent_id)}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className={`status-dot ${isOnline ? "online" : "offline"}`} />
+                  <strong style={{ fontSize: 14 }}>{member.display_name}</strong>
+                </div>
+                <span className={`agent-role-badge ${ROLE_CLASS[member.role] || ""}`} style={{ marginTop: 4, display: "inline-block" }}>
+                  {formatRole(member.role)}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </aside>
 
-      <section className="grid" style={{ gap: 12 }}>
-        <article className="card">
-          <h3 style={{ marginTop: 0 }}>Agent Metrics</h3>
-          {selectedAgentId ? (
-            <div className="metric-grid">
-              <Metric icon={<ListTodo size={14} />} label="Tasks assigned" value={agentStats.get(selectedAgentId)?.tasks_assigned ?? 0} />
-              <Metric icon={<Loader size={14} />} label="In progress" value={agentStats.get(selectedAgentId)?.tasks_in_progress ?? 0} />
-              <Metric icon={<CheckCircle size={14} />} label="Completed" value={agentStats.get(selectedAgentId)?.tasks_completed ?? 0} />
-              <Metric icon={<TrendingUp size={14} />} label="Accepted rate" value={`${agentStats.get(selectedAgentId)?.accepted_rate_percent ?? 0}%`} />
-              <Metric icon={<Clock size={14} />} label="Last activity" value={agentStats.get(selectedAgentId)?.last_activity ? new Date(agentStats.get(selectedAgentId)?.last_activity).toLocaleString() : "—"} smallValue />
+      <section className="grid" style={{ gap: 12, alignContent: "start" }}>
+        {selectedAgentId && (
+          <article className="card" style={{ padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h4 style={{ margin: 0, fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Metrics</h4>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {agentStats.get(selectedAgentId)?.last_activity ? timeAgo(agentStats.get(selectedAgentId)!.last_activity!) : "no activity"}
+              </span>
             </div>
-          ) : <p className="muted">Select an agent to inspect exact metrics.</p>}
-        </article>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
+              <span><strong>{agentStats.get(selectedAgentId)?.tasks_assigned ?? 0}</strong> assigned</span>
+              <span><strong>{agentStats.get(selectedAgentId)?.tasks_in_progress ?? 0}</strong> active</span>
+              <span><strong>{agentStats.get(selectedAgentId)?.tasks_completed ?? 0}</strong> done</span>
+              <span><strong>{agentStats.get(selectedAgentId)?.accepted_rate_percent ?? 0}%</strong> accepted</span>
+            </div>
+          </article>
+        )}
 
-        <article className="card">
+        <article className="card" style={{ overflow: "auto" }}>
           <h3 style={{ marginTop: 0 }}>Task Board ({filteredTasks.length})</h3>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            <button className={`tab${statusFilter === "all" ? " active" : ""}`} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setStatusFilter("all")}>All ({agentFiltered.length})</button>
-            <button className={`tab${statusFilter === "pending" ? " active" : ""}`} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setStatusFilter("pending")}>Pending ({pendingCount})</button>
-            <button className={`tab${statusFilter === "completed" ? " active" : ""}`} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setStatusFilter("completed")}>Completed ({completedCount})</button>
-          </div>
-
-          <div style={{ marginBottom: 10 }}>
-            <select className="select" style={{ width: "auto", fontSize: 13, padding: "4px 8px" }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-              {types.map((t) => (
-                <option key={t} value={t}>{t === "all" ? "All types" : t.replace(/_/g, " ")}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid">
-            {filteredTasks.map((task) => {
-              const hasResult = task.result && !PENDING_STATUSES.includes(task.status);
-              const statusIcon: Record<string, React.ReactNode> = {
-                accepted: <CircleCheck size={16} style={{ color: "#16a34a" }} />,
-                rejected: <CircleX size={16} style={{ color: "#dc2626" }} />,
-                in_progress: <Loader size={16} className="spin-icon" style={{ color: "#3b82f6" }} />,
-                proposed: <CircleDot size={16} style={{ color: "#9ca3af" }} />,
-                critique_period: <MessageSquareMore size={16} style={{ color: "#d97706" }} />,
-                voting: <Vote size={16} style={{ color: "#d97706" }} />,
-                completed: <CircleCheck size={16} style={{ color: "#d97706" }} />,
-                superseded: <CircleMinus size={16} style={{ color: "#9ca3af" }} />,
-              };
-              const typeIcon: Record<string, React.ReactNode> = {
-                literature_review: <BookOpen size={14} />,
-                analysis: <BarChart3 size={14} />,
-                deep_research: <Microscope size={14} />,
-                critique: <MessageSquareMore size={14} />,
-                synthesis: <FlaskConical size={14} />,
-              };
-              return (
-                <div key={task.id} className="card" style={{ padding: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setViewingTask(task)}>
+          <div className="grid" style={{ gap: 6 }}>
+            {filteredTasks.map((task) => (
+              <div key={task.id}>
+                <button
+                  className="task-row"
+                  onClick={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
+                  style={{ width: "100%", textAlign: "left", background: "none", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px", cursor: "pointer", color: "var(--text)" }}
+                >
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ flexShrink: 0, display: "flex" }}>{statusIcon[task.status] || <CircleDot size={16} style={{ color: "#9ca3af" }} />}</span>
-                    <div>
-                      <strong>{task.title}</strong>
-                      <p className="muted" style={{ marginBottom: 0, display: "flex", alignItems: "center", gap: 4 }}>{typeIcon[task.task_type]}{task.task_type.replace(/_/g, " ")}</p>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[task.status] || "var(--muted)", flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{task.title}</span>
+                    <span className="agent-role-badge" style={{ fontSize: 10 }}>{task.task_type.replace(/_/g, " ")}</span>
+                    <span style={{ fontSize: 16, color: "var(--muted)", transition: "transform 0.15s", transform: expandedTaskId === task.id ? "rotate(180deg)" : "rotate(0)" }}>&#9662;</span>
+                  </div>
+                </button>
+                {expandedTaskId === task.id && (
+                  <div className="card" style={{ margin: "4px 0 8px", padding: 12, borderLeft: `3px solid ${STATUS_COLORS[task.status] || "var(--border)"}` }}>
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+                      <span>Status: <strong style={{ color: STATUS_COLORS[task.status] }}>{task.status.replace(/_/g, " ")}</strong></span>
+                      <span>Type: <strong>{task.task_type.replace(/_/g, " ")}</strong></span>
+                      {task.verification_score !== null && <span>Verification: <strong>{task.verification_score}</strong></span>}
+                      {task.assigned_to && <span>Assigned: <strong>{agentName(task.assigned_to)}</strong></span>}
+                      {task.proposed_by && <span>Proposed: <strong>{agentName(task.proposed_by)}</strong></span>}
+                    </div>
+                    {task.description && (
+                      <div style={{ fontSize: 13, marginBottom: 8 }}>
+                        <ReactMarkdown>{task.description}</ReactMarkdown>
+                      </div>
+                    )}
+                    {task.result && (
+                      <details style={{ fontSize: 12 }}>
+                        <summary style={{ cursor: "pointer", color: "var(--accent)", fontWeight: 500, marginBottom: 4 }}>View Result</summary>
+                        <pre style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, padding: 10, overflow: "auto", maxHeight: 300, fontSize: 11, whiteSpace: "pre-wrap" }}>
+                          {JSON.stringify(task.result, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                    <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+                      {task.created_at && <span>Created {timeAgo(task.created_at)}</span>}
+                      {task.started_at && <span>Started {timeAgo(task.started_at)}</span>}
+                      {task.completed_at && <span>Completed {timeAgo(task.completed_at)}</span>}
                     </div>
                   </div>
-                  <ExternalLink size={14} style={{ color: "var(--muted)", flexShrink: 0 }} />
-                </div>
-              );
-            })}
+                )}
+              </div>
+            ))}
           </div>
         </article>
       </section>
-
-      {viewingTask && <TaskDetailDialog task={viewingTask} members={members} onClose={() => setViewingTask(null)} />}
     </div>
   );
 }
 
-function Metric({ label, value, icon, smallValue }: { label: string; value: string | number; icon?: React.ReactNode; smallValue?: boolean }) {
+function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="metric">
-      <div className="metric-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>{icon}{label}</div>
-      <div className="metric-value" style={smallValue ? { fontSize: 13 } : undefined}>{value}</div>
+      <div className="metric-label">{label}</div>
+      <div className="metric-value">{value}</div>
     </div>
   );
 }
 
-const AUTHOR_PALETTES = [
-  { bg: "#fef7f0", border: "#f97316", avatar: "#fff7ed" }, // warm orange
-  { bg: "#f0f7fe", border: "#3b82f6", avatar: "#eff6ff" }, // soft blue
-  { bg: "#f0fef4", border: "#16a34a", avatar: "#f0fdf4" }, // mint green
-  { bg: "#fdf0fe", border: "#d946ef", avatar: "#fdf4ff" }, // soft pink
-  { bg: "#fefef0", border: "#ca8a04", avatar: "#fefce8" }, // soft gold
-  { bg: "#f4f0fe", border: "#8b5cf6", avatar: "#f5f3ff" }, // lavender
-  { bg: "#f0fefe", border: "#0891b2", avatar: "#ecfeff" }, // cyan
-  { bg: "#fef0f0", border: "#ef4444", avatar: "#fef2f2" }, // rose
-];
-
-function authorColor(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
-  return AUTHOR_PALETTES[Math.abs(hash) % AUTHOR_PALETTES.length];
+interface DiscussionComment {
+  id: string;
+  task_id: string | null;
+  parent_id: string | null;
+  author_name: string;
+  body: string;
+  created_at: string;
 }
 
-function AuthorAvatar({ name }: { name: string }) {
-  const palette = authorColor(name);
-  const initials = name.split(/[\s-]+/).map((w) => w[0]).join("").toUpperCase().slice(0, 2);
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      width: 28, height: 28, borderRadius: "50%",
-      background: palette.avatar, border: `2px solid ${palette.border}`,
-      fontSize: 11, fontWeight: 700, color: palette.border, flexShrink: 0,
-    }}>
-      {initials}
-    </span>
-  );
+interface ActivityItem {
+  activity_type: string;
+  message: string;
+  agent_id: string | null;
+  created_at: string;
 }
 
-function DiscussionTab({ slug }: { slug: string }) {
+function DiscussionTab({ slug, members }: { slug: string; members: Member[] }) {
   const { user } = useCurrentUser();
-  const [comments, setComments] = useState<any[]>([]);
-  const [activity, setActivity] = useState<any[]>([]);
+  const [comments, setComments] = useState<DiscussionComment[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [input, setInput] = useState("");
+  const [replyTo, setReplyTo] = useState<DiscussionComment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const memberRoles = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of members) map.set(m.display_name, m.role);
+    return map;
+  }, [members]);
 
   const load = async () => {
     const [dRes, aRes] = await Promise.all([
@@ -675,17 +712,42 @@ function DiscussionTab({ slug }: { slug: string }) {
 
   usePolling(load, 5000, [slug]);
 
+  // Auto-scroll to bottom when new entries arrive
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [comments.length, activity.length]);
+
   const timeline = useMemo(() => {
-    const entries = [
-      ...comments.map((item) => ({ kind: "comment" as const, timestamp: item.created_at, item })),
-      ...activity.map((item) => ({ kind: "activity" as const, timestamp: item.created_at, item })),
+    const entries: { kind: "comment" | "activity"; timestamp: string; item: DiscussionComment | ActivityItem }[] = [
+      ...comments.filter((c) => !c.parent_id).map((item) => ({ kind: "comment" as const, timestamp: item.created_at, item })),
+      ...activity.filter((a) => a.activity_type !== "discussion_posted").map((item) => ({ kind: "activity" as const, timestamp: item.created_at, item })),
     ];
     entries.sort((a, b) => +new Date(a.timestamp) - +new Date(b.timestamp));
     return entries;
   }, [comments, activity]);
 
+  const repliesFor = useMemo(() => {
+    const map = new Map<string, DiscussionComment[]>();
+    for (const c of comments) {
+      if (c.parent_id) {
+        const arr = map.get(c.parent_id) || [];
+        arr.push(c);
+        map.set(c.parent_id, arr);
+      }
+    }
+    return map;
+  }, [comments]);
+
+  const getRoleClass = (authorName: string) => {
+    const role = memberRoles.get(authorName);
+    return role ? ROLE_CLASS[role] || "" : "";
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!input.trim()) return;
     if (!user) {
       setNeedsAuth(true);
       return;
@@ -695,7 +757,7 @@ function DiscussionTab({ slug }: { slug: string }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ body: input }),
+      body: JSON.stringify({ body: input, parent_id: replyTo?.id || null }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -703,78 +765,107 @@ function DiscussionTab({ slug }: { slug: string }) {
       return;
     }
     setInput("");
+    setReplyTo(null);
     setError(null);
     load();
   };
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [timeline.length]);
-
   return (
-    <section className="card" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 170px)", minHeight: 300, padding: 0, overflow: "hidden" }}>
+    <section className="card discussion-panel">
       <AuthPromptModal open={needsAuth} onClose={() => setNeedsAuth(false)} />
-
-      {/* Header */}
-      <div style={{ padding: "14px 18px 10px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-        <h2 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8, fontSize: 18 }}><MessageSquare size={20} /> Discussion</h2>
+      <div style={{ padding: "12px 12px 10px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div>
+          <h2 style={{ margin: "0 0 4px" }}>Discussion</h2>
+          <p className="muted" style={{ margin: 0, fontSize: 12 }}>Threaded conversation between agents and humans. Activity events are interleaved.</p>
+        </div>
+        <span className="muted" style={{ fontSize: 12, flexShrink: 0, paddingTop: 6 }}>{comments.length} messages</span>
       </div>
 
-      {/* Messages — scroll up for older */}
-      <div ref={scrollRef} style={{ flex: 1, overflow: "auto", padding: "12px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="discussion-timeline" ref={scrollRef}>
+        {timeline.length === 0 && <p className="muted" style={{ textAlign: "center", padding: 20 }}>No discussion yet. Be the first to post.</p>}
         {timeline.map((entry, idx) => {
           if (entry.kind === "activity") {
-            const agentName = entry.item.agent_name || "";
+            const act = entry.item as ActivityItem;
             return (
-              <div key={`a-${idx}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "2px 0" }}>
-                <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
-                <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
-                  <Activity size={12} />
-                  {agentName && <strong>{agentName}</strong>}
-                  {entry.item.activity_type.replace(/_/g, " ")} — {new Date(entry.item.created_at).toLocaleTimeString()}
-                </span>
-                <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+              <div key={`a-${idx}`} className="disc-activity">
+                <span className="disc-activity-type">{act.activity_type.replace(/_/g, " ")}</span>
+                <span style={{ flex: 1 }}>{act.message}</span>
+                <span>{timeAgo(act.created_at)}</span>
               </div>
             );
           }
-
-          const palette = authorColor(entry.item.author_name);
+          const comment = entry.item as DiscussionComment;
+          const replies = repliesFor.get(comment.id) || [];
           return (
-            <div key={`c-${idx}`} style={{
-              background: palette.bg,
-              borderLeft: `3px solid ${palette.border}`,
-              borderRadius: 8,
-              padding: "10px 14px",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <AuthorAvatar name={entry.item.author_name} />
-                <strong style={{ fontSize: 13, color: palette.border }}>{entry.item.author_name}</strong>
-                <span style={{ fontSize: 11, color: "#9ca3af" }}>{new Date(entry.item.created_at).toLocaleTimeString()}</span>
-              </div>
-              <div className="discussion-body"><ReactMarkdown>{entry.item.body}</ReactMarkdown></div>
+            <div key={`c-${comment.id}`} className="disc-entry">
+              <CommentBubble
+                comment={comment}
+                roleClass={getRoleClass(comment.author_name)}
+                onReply={() => setReplyTo(comment)}
+              />
+              {replies.length > 0 && (
+                <div className="disc-replies">
+                  {replies.map((reply) => (
+                    <div key={reply.id} className="disc-reply">
+                      <CommentBubble
+                        comment={reply}
+                        roleClass={getRoleClass(reply.author_name)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Compose — pinned bottom */}
-      <div style={{ padding: "10px 18px 14px", borderTop: "1px solid var(--border)", flexShrink: 0 }}>
-        {error && <p style={{ color: "#dc2626", margin: "0 0 6px", fontSize: 13 }}>{error}</p>}
-        <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <textarea className="textarea" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Write a message..." rows={2} style={{ flex: 1, resize: "none", margin: 0 }} />
-          <button className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, height: 38 }}><Send size={14} /> Send</button>
-        </form>
-      </div>
+      {replyTo && (
+        <div className="disc-reply-banner">
+          <span>Replying to <strong>{replyTo.author_name}</strong></span>
+          <button onClick={() => setReplyTo(null)}>Cancel</button>
+        </div>
+      )}
+
+      <form className="disc-input-area" onSubmit={submit}>
+        <textarea
+          className="input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={replyTo ? `Reply to ${replyTo.author_name}...` : "Join the discussion..."}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(e); } }}
+        />
+        <button className="btn btn-primary" type="submit" disabled={!input.trim()}>Send</button>
+      </form>
+      {error && <p style={{ color: "#dc2626", margin: 0, padding: "0 10px 8px" }}>{error}</p>}
     </section>
   );
 }
 
+function CommentBubble({ comment, roleClass, onReply }: { comment: DiscussionComment; roleClass: string; onReply?: () => void }) {
+  return (
+    <div className="disc-comment">
+      <div className="disc-comment-header">
+        <span className={`disc-author ${roleClass}`}>{comment.author_name}</span>
+        <span className="disc-time">{timeAgo(comment.created_at)}</span>
+      </div>
+      <div className="disc-body">
+        <ReactMarkdown>{comment.body}</ReactMarkdown>
+      </div>
+      {onReply && (
+        <div className="disc-actions">
+          <button onClick={onReply}>Reply</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DocsTab({ slug }: { slug: string }) {
-  const [docs, setDocs] = useState<any[]>([]);
-  const [selected, setSelected] = useState<any | null>(null);
+  const [docs, setDocs] = useState<{ id: string; filename: string; logical_path: string }[]>([]);
+  const [selected, setSelected] = useState<{ id: string; filename: string; logical_path: string } | null>(null);
   const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const loadDocs = async () => {
     const res = await fetch(`/api/labs/${slug}/docs?per_page=200`);
@@ -788,15 +879,26 @@ function DocsTab({ slug }: { slug: string }) {
   usePolling(loadDocs, 10000, [slug]);
 
   useEffect(() => {
+    let cancelled = false;
     const loadContent = async () => {
       if (!selected) {
         setContent("");
         return;
       }
-      const res = await fetch(`/api/labs/${slug}/docs/${selected.id}/content`);
-      if (res.ok) setContent(await res.text());
+      setLoading(true);
+      setContent("");
+      try {
+        const urlRes = await fetch(`/api/labs/${slug}/docs/${selected.id}/url?disposition=inline`);
+        if (!urlRes.ok || cancelled) return;
+        const { url } = await urlRes.json();
+        const textRes = await fetch(url);
+        if (textRes.ok && !cancelled) setContent(await textRes.text());
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
     loadContent();
+    return () => { cancelled = true; };
   }, [slug, selected]);
 
   const download = async () => {
@@ -808,29 +910,33 @@ function DocsTab({ slug }: { slug: string }) {
   };
 
   return (
-    <div className="grid" style={{ gridTemplateColumns: "280px 1fr", gap: 12 }}>
-      <aside className="card" style={{ maxHeight: "70vh", overflow: "auto" }}>
-        <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><FileText size={18} /> Docs</h3>
-        <div className="grid">
+    <div className="workspace-split">
+      <aside className="card">
+        <h3 style={{ marginTop: 0 }}>Documents</h3>
+        <p className="muted" style={{ margin: "0 0 10px", fontSize: 12 }}>Research reports and artifacts produced by the Synthesizer. Click to preview.</p>
+        <div className="grid" style={{ gap: 6 }}>
+          {docs.length === 0 && <p className="muted" style={{ fontSize: 13 }}>No documents yet.</p>}
           {docs.map((doc) => (
-            <button key={doc.id} className="card" style={{ textAlign: "left", padding: 10, borderColor: selected?.id === doc.id ? "#0f766e" : "#e5e7eb" }} onClick={() => setSelected(doc)}>
-              <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><File size={14} /> {doc.filename}</strong>
-              <p className="muted" style={{ marginBottom: 0, fontSize: 12 }}>{doc.logical_path}</p>
+            <button key={doc.id} className="card" style={{ textAlign: "left", padding: 10, borderColor: selected?.id === doc.id ? "var(--accent)" : "var(--border)", color: "var(--text)" }} onClick={() => setSelected(doc)}>
+              <strong style={{ fontSize: 13 }}>{doc.filename}</strong>
+              <p className="muted" style={{ marginBottom: 0, fontSize: 11 }}>{doc.logical_path}</p>
             </button>
           ))}
         </div>
       </aside>
 
-      <section className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><FileText size={18} /> {selected ? selected.filename : "Select a doc"}</h3>
-          <button className="btn" onClick={download} disabled={!selected} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Download size={14} /> Download</button>
+      <section className="card" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+          <h3 style={{ marginTop: 0 }}>{selected ? selected.filename : "Select a document"}</h3>
+          {selected && <button className="btn" onClick={download}>Download</button>}
         </div>
-        {selected ? (
-          <article className="card" style={{ maxHeight: "68vh", overflow: "auto" }}>
-            <ReactMarkdown>{content || "*No content loaded*"}</ReactMarkdown>
+        {!selected && <p className="muted">Select a document from the sidebar to preview it.</p>}
+        {selected && loading && <p className="muted">Loading document...</p>}
+        {selected && !loading && (
+          <article className="doc-preview">
+            <ReactMarkdown>{content || "*Empty document*"}</ReactMarkdown>
           </article>
-        ) : <p className="muted">No docs yet.</p>}
+        )}
       </section>
     </div>
   );
