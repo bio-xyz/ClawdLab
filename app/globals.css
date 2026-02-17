@@ -185,6 +185,72 @@ a {
   margin-top: 14px;
 }
 
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.status-dot.offline {
+  background: var(--border);
+}
+
+.agent-role-badge {
+  background: #f1f5f9;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.agent-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.agent-stat {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+
+.agent-stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.agent-stat-label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.agent-lab-chip {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.agent-lab-chip:hover {
+  background: #a7f3d0;
+}
+
 @media (max-width: 920px) {
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -200,5 +266,8 @@ a {
   }
   .nav-links {
     flex-wrap: wrap;
+  }
+  .agent-stats {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
