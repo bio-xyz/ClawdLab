@@ -362,16 +362,107 @@ function resultToMarkdown(result: any): string {
   return parts.join("\n\n");
 }
 
-function TaskResultDialog({ task, onClose }: { task: any; onClose: () => void }) {
+function TaskDetailDialog({ task, members, onClose }: { task: any; members: any[]; onClose: () => void }) {
+  const agentName = (id: string | null) => {
+    if (!id) return "—";
+    const m = members.find((m) => m.agent_id === id);
+    return m?.display_name || id.slice(0, 8);
+  };
+
+  const statusColors: Record<string, string> = {
+    accepted: "#16a34a", rejected: "#dc2626", in_progress: "#3b82f6",
+    proposed: "#9ca3af", critique_period: "#d97706", voting: "#d97706",
+    completed: "#d97706", superseded: "#9ca3af",
+  };
+
+  const typeIcons: Record<string, React.ReactNode> = {
+    literature_review: <BookOpen size={16} />,
+    analysis: <BarChart3 size={16} />,
+    deep_research: <Microscope size={16} />,
+    critique: <MessageSquareMore size={16} />,
+    synthesis: <FlaskConical size={16} />,
+  };
+
+  const hasResult = task.result != null;
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
-      <div className="card" style={{ maxWidth: 800, width: "100%", maxHeight: "80vh", overflow: "auto", padding: 24 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>{task.title}</h3>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
+      <div className="card" style={{ maxWidth: 860, width: "100%", maxHeight: "85vh", overflow: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ margin: "0 0 6px" }}>{task.title}</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{
+                background: statusColors[task.status] || "#9ca3af",
+                color: "#fff",
+                fontSize: 11, fontWeight: 600,
+                padding: "2px 8px", borderRadius: 6,
+                textTransform: "uppercase", letterSpacing: 0.5,
+              }}>{task.status.replace(/_/g, " ")}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, color: "var(--muted)" }}>
+                {typeIcons[task.task_type]}{task.task_type.replace(/_/g, " ")}
+              </span>
+            </div>
+          </div>
           <button className="btn" onClick={onClose} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><X size={14} /> Close</button>
         </div>
-        <p className="muted" style={{ marginTop: 0 }}>status: {task.status} • type: {task.task_type}</p>
-        <ReactMarkdown>{resultToMarkdown(task.result)}</ReactMarkdown>
+
+        {/* Meta grid */}
+        <div style={{ padding: "14px 24px", borderBottom: "1px solid var(--border)", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px 20px" }}>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Proposed by</div>
+            <div style={{ fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}><Bot size={14} /> {agentName(task.proposed_by)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Assigned to</div>
+            <div style={{ fontSize: 13, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}><Bot size={14} /> {agentName(task.assigned_to)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Created</div>
+            <div style={{ fontSize: 13 }}>{task.created_at ? new Date(task.created_at).toLocaleString() : "—"}</div>
+          </div>
+          {task.started_at && (
+            <div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Started</div>
+              <div style={{ fontSize: 13 }}>{new Date(task.started_at).toLocaleString()}</div>
+            </div>
+          )}
+          {task.completed_at && (
+            <div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Completed</div>
+              <div style={{ fontSize: 13 }}>{new Date(task.completed_at).toLocaleString()}</div>
+            </div>
+          )}
+          {task.verification_score != null && (
+            <div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>Verification score</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{task.verification_score}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Description */}
+        {task.description && (
+          <div style={{ padding: "14px 24px", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Description</div>
+            <div className="discussion-body"><ReactMarkdown>{task.description}</ReactMarkdown></div>
+          </div>
+        )}
+
+        {/* Result */}
+        {hasResult && (
+          <div style={{ padding: "14px 24px" }}>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Output</div>
+            <div className="discussion-body"><ReactMarkdown>{resultToMarkdown(task.result)}</ReactMarkdown></div>
+          </div>
+        )}
+
+        {!task.description && !hasResult && (
+          <div style={{ padding: "24px", textAlign: "center" }}>
+            <p className="muted">No description or output yet.</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -503,7 +594,7 @@ function AgentsTab({ slug }: { slug: string }) {
                 synthesis: <FlaskConical size={14} />,
               };
               return (
-                <div key={task.id} className="card" style={{ padding: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <div key={task.id} className="card" style={{ padding: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setViewingTask(task)}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ flexShrink: 0, display: "flex" }}>{statusIcon[task.status] || <CircleDot size={16} style={{ color: "#9ca3af" }} />}</span>
                     <div>
@@ -511,11 +602,7 @@ function AgentsTab({ slug }: { slug: string }) {
                       <p className="muted" style={{ marginBottom: 0, display: "flex", alignItems: "center", gap: 4 }}>{typeIcon[task.task_type]}{task.task_type.replace(/_/g, " ")}</p>
                     </div>
                   </div>
-                  {hasResult && (
-                    <button className="btn" style={{ flexShrink: 0, fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setViewingTask(task)}>
-                      <ExternalLink size={14} /> View output
-                    </button>
-                  )}
+                  <ExternalLink size={14} style={{ color: "var(--muted)", flexShrink: 0 }} />
                 </div>
               );
             })}
@@ -523,7 +610,7 @@ function AgentsTab({ slug }: { slug: string }) {
         </article>
       </section>
 
-      {viewingTask && <TaskResultDialog task={viewingTask} onClose={() => setViewingTask(null)} />}
+      {viewingTask && <TaskDetailDialog task={viewingTask} members={members} onClose={() => setViewingTask(null)} />}
     </div>
   );
 }
