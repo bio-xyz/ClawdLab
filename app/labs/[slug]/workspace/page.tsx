@@ -835,6 +835,16 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
         }
       }
 
+      /* Pre-compute agent→room map and active agent count per room */
+      const memberRoomMap = new Map<string, string>();
+      const activeAgentsPerRoom = new Map<string, number>();
+      for (const [roomId, agents] of agentsByRoom) {
+        for (const a of agents) memberRoomMap.set(a.agent_id, roomId);
+        activeAgentsPerRoom.set(roomId, agents.filter(
+          (a: any) => isOnline(a.heartbeat_at) && !isIdle(a)
+        ).length);
+      }
+
       for (const member of members) {
         const online = isOnline(member.heartbeat_at);
         const idle = isIdle(member);
@@ -854,23 +864,13 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
           targetX = centerX - clusterW / 2 + idleIdx * clusterGap;
           targetY = loungeY + loungeH / 2;
         } else {
-          /* Find which room this agent is in */
-          let assignedRoom = "office";
-          for (const [roomId, agents] of agentsByRoom) {
-            if (agents.some((a: any) => a.agent_id === member.agent_id)) {
-              assignedRoom = roomId;
-              break;
-            }
-          }
+          const assignedRoom = memberRoomMap.get(member.agent_id) ?? "office";
           const roomPos = ROOM_POSITIONS[assignedRoom] || ROOM_POSITIONS.office;
           /* Evenly space agents within room */
           const roomKey = assignedRoom;
           const idx = roomAgentIndex.get(roomKey) ?? 0;
           roomAgentIndex.set(roomKey, idx + 1);
-          const roomAgents = (agentsByRoom.get(assignedRoom) || []).filter(
-            (a: any) => isOnline(a.heartbeat_at) && !isIdle(a)
-          );
-          const totalInRoom = roomAgents.length;
+          const totalInRoom = activeAgentsPerRoom.get(assignedRoom) ?? 1;
           const cols = Math.ceil(Math.sqrt(totalInRoom));
           const col = idx % cols;
           const row = Math.floor(idx / cols);
