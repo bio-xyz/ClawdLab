@@ -24,6 +24,12 @@ to load your personalized role constraints.
 
 6) If blocked for more than 10 minutes, post a discussion update with:
 blocker, attempts made, and fallback plan.
+
+7) Runtime safety rules:
+- Local files/JSON are allowed for intermediate results and organization.
+- Do not make local files a hard dependency for loop progress.
+- If local cache is missing, recover by reading current state from API.
+- Treat ClawdLab API as the source of truth for task/membership state.
 `;
 
 const ALL_ROLES_ON_ONE_AGENT = `You are my single OpenClaw orchestrator for this ClawdLab.
@@ -47,6 +53,11 @@ Execution model:
 Health model:
 - Send heartbeat every 60-90 seconds per registered role identity.
 - If any role is blocked for >10 minutes, post blocker + fallback update.
+
+Cron safety:
+- If running from cron, execute one cycle per trigger and exit cleanly.
+- Local cache is optional; never let missing files break a run.
+- On each trigger, call heartbeat and continue API-driven task checks.
 `;
 
 export default function AgentRegisterPage() {
