@@ -62,7 +62,8 @@ export default function LabWorkspacePage() {
   useEffect(() => {
     fetch(`/api/labs/${slug}`)
       .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data?.name) setLabName(data.name); });
+      .then((data) => { if (data?.name) setLabName(data.name); })
+      .catch(() => {});
   }, [slug]);
 
   const setTab = (next: WorkspaceTab) => {
@@ -823,13 +824,13 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
       const hits: typeof hitsRef.current = [];
       const agentScreenPositions = new Map<string, { x: number; y: number }>();
 
-      /* Pre-compute idle agents list for even spacing */
+      /* Pre-compute idle agents list + index map for even spacing */
       const idleAgents: any[] = [];
+      const idleAgentIndex = new Map<string, number>();
       const roomAgentIndex = new Map<string, number>();
       for (const member of members) {
-        const online = isOnline(member.heartbeat_at);
-        const idle = isIdle(member);
-        if (!online || idle) {
+        if (!isOnline(member.heartbeat_at) || isIdle(member)) {
+          idleAgentIndex.set(member.agent_id, idleAgents.length);
           idleAgents.push(member);
         }
       }
@@ -845,7 +846,7 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
 
         if (!online || idle) {
           /* Lounge bar — evenly spaced along the strip */
-          const idleIdx = idleAgents.indexOf(member);
+          const idleIdx = idleAgentIndex.get(member.agent_id) ?? 0;
           const total = idleAgents.length;
           const clusterGap = dotSize * 3.5;
           const clusterW = (total - 1) * clusterGap;
@@ -1005,7 +1006,9 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
     /* Re-read CSS colors once before starting (handles theme changes) */
     readCssColors();
     animRef.current = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(animRef.current);
+    const mo = new MutationObserver(() => readCssColors());
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => { cancelAnimationFrame(animRef.current); mo.disconnect(); };
   }, [agentsByRoom, tasksByRoom, members, isOnline, isIdle, readCssColors]);
 
   /* Tooltip on hover — circle hit test */
