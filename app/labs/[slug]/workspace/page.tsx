@@ -125,28 +125,6 @@ function OverviewTab({ slug }: { slug: string }) {
           <h2 style={{ marginTop: 0, marginBottom: 0 }}>Overview</h2>
           <Link className="btn" href="/forum" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}><ArrowLeft size={14} /> Back to forum</Link>
         </div>
-
-        <div className="card" style={{ background: "var(--accent-soft)", borderColor: "var(--accent)", minHeight: 120, position: "relative", overflow: "hidden" }}>
-          <p style={{ marginTop: 0, fontWeight: 600 }}>Live Lab Animation (lightweight)</p>
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-            {[0, 1, 2, 3].map((idx) => (
-              <span
-                key={idx}
-                style={{
-                  position: "absolute",
-                  left: `${10 + idx * 22}%`,
-                  top: `${20 + (idx % 2) * 28}%`,
-                  width: 12,
-                  height: 12,
-                  borderRadius: "999px",
-                  background: "#0f766e",
-                  opacity: 0.7,
-                  animation: `pulse${idx} 2.2s ease-in-out ${idx * 0.2}s infinite`,
-                }}
-              />
-            ))}
-          </div>
-        </div>
       </section>
 
       <section className="metric-grid">
@@ -161,12 +139,6 @@ function OverviewTab({ slug }: { slug: string }) {
 
       <LabStateSection labStates={labStates} stateTasks={stateTasks} activity={activity} />
 
-      <style jsx>{`
-        @keyframes pulse0 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-8px);} }
-        @keyframes pulse1 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(7px);} }
-        @keyframes pulse2 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-6px);} }
-        @keyframes pulse3 { 0%,100% { transform: translateY(0);} 50% { transform: translateY(8px);} }
-      `}</style>
     </div>
   );
 }
@@ -1305,23 +1277,48 @@ function DiscussionTab({ slug }: { slug: string }) {
 
 function DocsTab({ slug }: { slug: string }) {
   const [docs, setDocs] = useState<any[]>([]);
-  const [selected, setSelected] = useState<any | null>(null);
+  const [artifacts, setArtifacts] = useState<any[]>([]);
+  const [selected, setSelected] = useState<{ kind: "doc" | "artifact"; id: string } | null>(null);
   const [content, setContent] = useState("");
+  const [artifactsError, setArtifactsError] = useState<string | null>(null);
 
   const loadDocs = async () => {
-    const res = await fetch(`/api/labs/${slug}/docs?per_page=200`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const items = data.items || [];
-    setDocs(items);
-    if (!selected && items[0]) setSelected(items[0]);
+    const [docsRes, artifactsRes] = await Promise.all([
+      fetch(`/api/labs/${slug}/docs?per_page=200`),
+      fetch(`/api/labs/${slug}/artifacts?per_page=200`),
+    ]);
+
+    const docsItems = docsRes.ok ? ((await docsRes.json()).items || []) : [];
+    setDocs(docsItems);
+
+    let artifactItems: any[] = [];
+    if (artifactsRes.ok) {
+      artifactItems = (await artifactsRes.json()).items || [];
+      setArtifactsError(null);
+    } else if (artifactsRes.status === 401) {
+      setArtifactsError("Sign in to view analysis artifacts.");
+    } else {
+      setArtifactsError("Failed to load analysis artifacts.");
+    }
+    setArtifacts(artifactItems);
+
+    setSelected((current) => {
+      if (current?.kind === "doc" && docsItems.some((doc: any) => doc.id === current.id)) return current;
+      if (current?.kind === "artifact" && artifactItems.some((artifact: any) => artifact.artifact_id === current.id)) return current;
+      if (docsItems[0]) return { kind: "doc", id: docsItems[0].id };
+      if (artifactItems[0]) return { kind: "artifact", id: artifactItems[0].artifact_id };
+      return null;
+    });
   };
 
   usePolling(loadDocs, 10000, [slug]);
 
+  const selectedDoc = selected?.kind === "doc" ? docs.find((doc) => doc.id === selected.id) : null;
+  const selectedArtifact = selected?.kind === "artifact" ? artifacts.find((artifact) => artifact.artifact_id === selected.id) : null;
+
   useEffect(() => {
     const loadContent = async () => {
-      if (!selected) {
+      if (!selected || selected.kind !== "doc") {
         setContent("");
         return;
       }
@@ -1332,37 +1329,82 @@ function DocsTab({ slug }: { slug: string }) {
   }, [slug, selected]);
 
   const download = async () => {
-    if (!selected) return;
-    const res = await fetch(`/api/labs/${slug}/docs/${selected.id}/url?disposition=attachment`);
+    if (!selectedDoc) return;
+    const res = await fetch(`/api/labs/${slug}/docs/${selectedDoc.id}/url?disposition=attachment`);
     if (!res.ok) return;
     const { url } = await res.json();
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const looksLikeHttpUrl = (value: string) => /^https?:\/\//i.test(value);
+
   return (
     <div className="grid" style={{ gridTemplateColumns: "280px 1fr", gap: 12 }}>
       <aside className="card" style={{ maxHeight: "70vh", overflow: "auto" }}>
         <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><FileText size={18} /> Docs</h3>
+        <h4 style={{ margin: "8px 0 6px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)" }}>Markdown Docs</h4>
         <div className="grid">
           {docs.map((doc) => (
-            <button key={doc.id} className="card" style={{ textAlign: "left", padding: 10, borderColor: selected?.id === doc.id ? "var(--accent)" : "var(--border)" }} onClick={() => setSelected(doc)}>
+            <button key={doc.id} className="card" style={{ textAlign: "left", padding: 10, borderColor: selected?.kind === "doc" && selected.id === doc.id ? "#0f766e" : "#e5e7eb" }} onClick={() => setSelected({ kind: "doc", id: doc.id })}>
               <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><File size={14} /> {doc.filename}</strong>
               <p className="muted" style={{ marginBottom: 0, fontSize: 12 }}>{doc.logical_path}</p>
             </button>
           ))}
         </div>
+        {docs.length === 0 && <p className="muted" style={{ fontSize: 13 }}>No markdown docs yet.</p>}
+
+        <h4 style={{ margin: "14px 0 6px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)" }}>Analysis Artifacts</h4>
+        {artifactsError && <p className="muted" style={{ fontSize: 13 }}>{artifactsError}</p>}
+        <div className="grid">
+          {artifacts.map((artifact) => (
+            <button
+              key={artifact.artifact_id}
+              className="card"
+              style={{ textAlign: "left", padding: 10, borderColor: selected?.kind === "artifact" && selected.id === artifact.artifact_id ? "#0f766e" : "#e5e7eb" }}
+              onClick={() => setSelected({ kind: "artifact", id: artifact.artifact_id })}
+            >
+              <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><BarChart3 size={14} /> {artifact.name}</strong>
+              <p className="muted" style={{ marginBottom: 0, fontSize: 12 }}>{artifact.task_title}</p>
+              <p className="muted" style={{ marginBottom: 0, fontSize: 12 }}>{artifact.type} · {artifact.source.replace(/_/g, " ")}</p>
+            </button>
+          ))}
+        </div>
+        {!artifactsError && artifacts.length === 0 && <p className="muted" style={{ fontSize: 13 }}>No analysis artifacts yet.</p>}
       </aside>
 
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><FileText size={18} /> {selected ? selected.filename : "Select a doc"}</h3>
-          <button className="btn" onClick={download} disabled={!selected} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Download size={14} /> Download</button>
+          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            {selectedDoc ? <FileText size={18} /> : <BarChart3 size={18} />}
+            {selectedDoc ? selectedDoc.filename : selectedArtifact ? selectedArtifact.name : "Select a doc or artifact"}
+          </h3>
+          <button className="btn" onClick={download} disabled={!selectedDoc} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Download size={14} /> Download</button>
         </div>
-        {selected ? (
+        {selectedDoc ? (
           <article className="card" style={{ maxHeight: "68vh", overflow: "auto" }}>
             <ReactMarkdown>{content || "*No content loaded*"}</ReactMarkdown>
           </article>
-        ) : <p className="muted">No docs yet.</p>}
+        ) : selectedArtifact ? (
+          <article className="card" style={{ maxHeight: "68vh", overflow: "auto" }}>
+            <p style={{ marginTop: 0 }}><strong>Artifact ID:</strong> <code>{selectedArtifact.artifact_id}</code></p>
+            <p><strong>Task:</strong> {selectedArtifact.task_title} (<code>{selectedArtifact.task_id}</code>)</p>
+            <p><strong>Task Status:</strong> {String(selectedArtifact.task_status).replace(/_/g, " ")}</p>
+            <p><strong>Task Type:</strong> {String(selectedArtifact.task_type).replace(/_/g, " ")}</p>
+            <p><strong>Type:</strong> {selectedArtifact.type}</p>
+            <p><strong>Source:</strong> {String(selectedArtifact.source).replace(/_/g, " ")}</p>
+            {selectedArtifact.provider_job_id && <p><strong>Provider Job:</strong> <code>{selectedArtifact.provider_job_id}</code></p>}
+            {selectedArtifact.description && <p><strong>Description:</strong> {selectedArtifact.description}</p>}
+            {selectedArtifact.path_or_url && (
+              <p>
+                <strong>Path / URL:</strong>{" "}
+                {looksLikeHttpUrl(selectedArtifact.path_or_url)
+                  ? <a href={selectedArtifact.path_or_url} target="_blank" rel="noreferrer">{selectedArtifact.path_or_url}</a>
+                  : <code>{selectedArtifact.path_or_url}</code>}
+              </p>
+            )}
+            <p><strong>Updated:</strong> {new Date(selectedArtifact.updated_at).toLocaleString()}</p>
+          </article>
+        ) : <p className="muted">No docs or artifacts yet.</p>}
       </section>
     </div>
   );
