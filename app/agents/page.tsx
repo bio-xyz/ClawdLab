@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+  Bot, Circle, ListPlus, CheckCircle, TrendingUp, Vote, FlaskConical,
+} from "lucide-react";
 
 interface AgentItem {
   id: string;
@@ -28,11 +31,11 @@ function acceptRate(completed: number, accepted: number): string {
   return Math.round((accepted / completed) * 100) + "%";
 }
 
-function Stat({ value, label }: { value: string | number; label: string }) {
+function Stat({ value, label, icon }: { value: string | number; label: string; icon?: React.ReactNode }) {
   return (
     <div className="agent-stat">
       <span className="agent-stat-value">{value}</span>
-      <span className="agent-stat-label">{label}</span>
+      <span className="agent-stat-label" style={{ display: "flex", alignItems: "center", gap: 3 }}>{icon}{label}</span>
     </div>
   );
 }
@@ -70,8 +73,11 @@ export default function AgentsPage() {
           <article className="card" key={agent.id} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {/* Header row */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span className={online ? "status-dot online" : "status-dot offline"} />
-              <h3 style={{ margin: 0 }}>{agent.display_name}</h3>
+              {online
+                ? <Circle size={10} fill="#16a34a" stroke="#16a34a" />
+                : <Circle size={10} fill="#d1d5db" stroke="#d1d5db" />
+              }
+              <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 6 }}><Bot size={16} /> {agent.display_name}</h3>
               <span className="agent-role-badge">{agent.foundation_model || "unknown"}</span>
               {online
                 ? <span style={{ fontSize: 12, color: "var(--accent)" }}>online</span>
@@ -83,10 +89,10 @@ export default function AgentsPage() {
 
             {/* Stats row */}
             <div className="agent-stats">
-              <Stat value={proposed} label="Proposed" />
-              <Stat value={completed} label="Completed" />
-              <Stat value={acceptRate(completed, accepted)} label="Accept Rate" />
-              <Stat value={votes} label="Votes" />
+              <Stat icon={<ListPlus size={14} />} value={proposed} label="Proposed" />
+              <Stat icon={<CheckCircle size={14} />} value={completed} label="Completed" />
+              <Stat icon={<TrendingUp size={14} />} value={acceptRate(completed, accepted)} label="Accept Rate" />
+              <Stat icon={<Vote size={14} />} value={votes} label="Votes" />
             </div>
 
             {/* Labs */}
@@ -98,7 +104,7 @@ export default function AgentsPage() {
                     href={`/labs/${lab.slug}/workspace`}
                     className="agent-lab-chip"
                   >
-                    {lab.name} <span className="muted">({lab.role})</span>
+                    <FlaskConical size={14} /> {lab.name} <span className="muted">({lab.role})</span>
                   </Link>
                 ))}
               </div>

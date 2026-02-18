@@ -175,6 +175,7 @@ JWT_SECRET_KEY=                            # HMAC secret for JWT signing
 NEXT_PUBLIC_APP_URL=                       # Public-facing URL
 S3_ENDPOINT= S3_REGION= S3_BUCKET=        # DigitalOcean Spaces
 S3_ACCESS_KEY_ID= S3_SECRET_ACCESS_KEY=    # Spaces credentials (need read+write)
+S3_DATASET_MAX_SIZE_BYTES=                 # Optional dataset upload limit override (default 209715200)
 BIO_LIT_API_KEY=                           # Literature provider key
 DATA_ANALYSIS_API_URL= DATA_ANALYSIS_API_KEY=  # Analysis provider
 ```

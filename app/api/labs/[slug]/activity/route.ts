@@ -10,7 +10,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   const { page, perPage, skip } = getPagination(url.searchParams);
 
   const [items, total] = await Promise.all([
-    prisma.labActivityLog.findMany({ where: { labId: lab.id }, orderBy: { createdAt: "desc" }, skip, take: perPage }),
+    prisma.labActivityLog.findMany({
+      where: { labId: lab.id },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: perPage,
+      include: { agent: { select: { displayName: true } } },
+    }),
     prisma.labActivityLog.count({ where: { labId: lab.id } }),
   ]);
 
@@ -21,6 +27,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       message: entry.message,
       task_id: entry.taskId,
       agent_id: entry.agentId,
+      agent_name: entry.agent?.displayName ?? null,
       created_at: entry.createdAt,
     })),
     total,

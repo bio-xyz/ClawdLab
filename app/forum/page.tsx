@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { useCurrentUser } from "@/components/useCurrentUser";
+import {
+  FlaskConical, Bot, ListTodo, FileText, ArrowUp,
+  MessageCircle, Lightbulb, ArrowRight, LayoutGrid,
+  User, Send, RefreshCw,
+} from "lucide-react";
 
 interface ForumPost {
   id: string;
@@ -101,27 +106,27 @@ export default function ForumPage() {
           <textarea className="textarea" placeholder="Write your idea in markdown..." value={body} onChange={(e) => setBody(e.target.value)} />
           {error && <p style={{ color: "#dc2626", margin: 0 }}>{error}</p>}
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-            <button className="btn btn-primary">Post idea</button>
-            <button type="button" className="btn" onClick={load}>Refresh</button>
+            <button className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Send size={14} /> Post idea</button>
+            <button type="button" className="btn" onClick={load} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><RefreshCw size={14} /> Refresh</button>
           </div>
         </form>
       </section>
 
       {/* Filter tabs */}
       <div className="tabs">
-        <button className={`tab${filter === "all" ? " active" : ""}`} onClick={() => setFilter("all")}>
-          All ({posts.length})
+        <button className={`tab${filter === "all" ? " active" : ""}`} onClick={() => setFilter("all")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <LayoutGrid size={16} /> All ({posts.length})
         </button>
         {user && (
-          <button className={`tab${filter === "mine" ? " active" : ""}`} onClick={() => setFilter("mine")}>
-            My Labs ({myLabCount})
+          <button className={`tab${filter === "mine" ? " active" : ""}`} onClick={() => setFilter("mine")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <User size={16} /> My Labs ({myLabCount})
           </button>
         )}
-        <button className={`tab${filter === "labs" ? " active" : ""}`} onClick={() => setFilter("labs")}>
-          All Labs ({labCount})
+        <button className={`tab${filter === "labs" ? " active" : ""}`} onClick={() => setFilter("labs")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <FlaskConical size={16} /> All Labs ({labCount})
         </button>
-        <button className={`tab${filter === "ideas" ? " active" : ""}`} onClick={() => setFilter("ideas")}>
-          Ideas ({ideaCount})
+        <button className={`tab${filter === "ideas" ? " active" : ""}`} onClick={() => setFilter("ideas")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Lightbulb size={16} /> Ideas ({ideaCount})
         </button>
       </div>
 
@@ -129,19 +134,19 @@ export default function ForumPage() {
         post.lab_slug ? (
           <article key={post.id} className="card lab-card">
             <div className="lab-card-header">
-              <span className="lab-badge">Lab</span>
+              <span className="lab-badge" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><FlaskConical size={14} /> Lab</span>
               <h3 style={{ margin: 0 }}>{post.lab_name || post.title}</h3>
             </div>
             {post.lab_description && (
               <p className="muted" style={{ margin: "8px 0 0" }}>{post.lab_description.slice(0, 200)}{post.lab_description.length > 200 ? "..." : ""}</p>
             )}
             <div className="lab-stats">
-              <span>{post.lab_member_count} agent{post.lab_member_count !== 1 ? "s" : ""}</span>
-              <span>{post.lab_task_count} task{post.lab_task_count !== 1 ? "s" : ""}</span>
-              <span>{post.lab_doc_count} doc{post.lab_doc_count !== 1 ? "s" : ""}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Bot size={14} /> {post.lab_member_count} agent{post.lab_member_count !== 1 ? "s" : ""}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><ListTodo size={14} /> {post.lab_task_count} task{post.lab_task_count !== 1 ? "s" : ""}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><FileText size={14} /> {post.lab_doc_count} doc{post.lab_doc_count !== 1 ? "s" : ""}</span>
             </div>
             <div className="lab-card-actions">
-              <Link href={`/labs/${post.lab_slug}/workspace`} className="btn btn-primary">Enter lab</Link>
+              <Link href={`/labs/${post.lab_slug}/workspace`} className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>Enter lab <ArrowRight size={14} /></Link>
               <Link href={`/forum/${post.id}`} className="muted" style={{ fontSize: 13 }}>View original idea</Link>
             </div>
           </article>
@@ -151,9 +156,9 @@ export default function ForumPage() {
             <p className="muted" style={{ marginTop: 0 }}>{post.body.slice(0, 280)}{post.body.length > 280 ? "..." : ""}</p>
             <div style={{ display: "flex", gap: 12, color: "#6b7280", fontSize: 13 }}>
               <span>{post.author_name}</span>
-              <span>{post.upvotes} upvotes</span>
-              <span>{post.comment_count} comments</span>
-              <span className="muted">No lab yet</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><ArrowUp size={14} /> {post.upvotes} upvotes</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><MessageCircle size={14} /> {post.comment_count} comments</span>
+              <span className="muted" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Lightbulb size={14} /> No lab yet</span>
             </div>
           </article>
         ),
