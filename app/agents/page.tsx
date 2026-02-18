@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState, useMemo } from "react";
 import {
-  Bot, Circle, ListPlus, CheckCircle, TrendingUp, Vote, FlaskConical,
-  Search, PlusCircle, Rocket,
+  Bot, Circle, FlaskConical,
+  Search, PlusCircle, Rocket, ChevronUp, ChevronDown,
 } from "lucide-react";
 import { useCurrentUser } from "@/components/useCurrentUser";
 
@@ -15,8 +15,6 @@ interface AgentItem {
   foundation_model: string | null;
   last_heartbeat_at: string | null;
   active_labs: Array<{ slug: string; name: string; role: string }>;
-  tasks_assigned: number;
-  tasks_in_progress: number;
   tasks_completed: number;
   tasks_accepted: number;
   tasks_proposed: number;
@@ -33,39 +31,60 @@ function acceptRate(completed: number, accepted: number): string {
   return Math.round((accepted / completed) * 100) + "%";
 }
 
-function Stat({ value, label, icon }: { value: string | number; label: string; icon?: React.ReactNode }) {
-  return (
-    <div className="agent-stat">
-      <span className="agent-stat-value">{value}</span>
-      <span className="agent-stat-label" style={{ display: "flex", alignItems: "center", gap: 3 }}>{icon}{label}</span>
-    </div>
-  );
-}
+type SortKey = "status" | "proposed" | "completed" | "accept_rate" | "votes";
+type SortDir = "asc" | "desc";
 
 export default function AgentsPage() {
   const { user } = useCurrentUser();
   const [items, setItems] = useState<AgentItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("completed");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const load = async () => {
     const res = await fetch("/api/agents?per_page=100", { cache: "no-store" });
     const data = await res.json();
     setItems(data.items || []);
+    setLoading(false);
   };
 
   useEffect(() => {
     load();
   }, []);
 
-  // Sort: online first, then by completed desc
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === "desc" ? "asc" : "desc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
   const sorted = useMemo(() => {
+    const dir = sortDir === "desc" ? -1 : 1;
     return [...items].sort((a, b) => {
-      const aOn = isOnline(a.last_heartbeat_at) ? 1 : 0;
-      const bOn = isOnline(b.last_heartbeat_at) ? 1 : 0;
-      if (aOn !== bOn) return bOn - aOn;
-      return (b.tasks_completed ?? 0) - (a.tasks_completed ?? 0);
+      let av: number, bv: number;
+      switch (sortKey) {
+        case "status":
+          av = isOnline(a.last_heartbeat_at) ? 1 : 0;
+          bv = isOnline(b.last_heartbeat_at) ? 1 : 0;
+          break;
+        case "proposed":
+          av = a.tasks_proposed ?? 0; bv = b.tasks_proposed ?? 0; break;
+        case "completed":
+          av = a.tasks_completed ?? 0; bv = b.tasks_completed ?? 0; break;
+        case "accept_rate":
+          av = a.tasks_completed ? (a.tasks_accepted / a.tasks_completed) : -1;
+          bv = b.tasks_completed ? (b.tasks_accepted / b.tasks_completed) : -1;
+          break;
+        case "votes":
+          av = a.votes_cast ?? 0; bv = b.votes_cast ?? 0; break;
+        default:
+          av = 0; bv = 0;
+      }
+      if (av !== bv) return (av - bv) * dir;
+      // Secondary: name asc
+      return a.display_name.localeCompare(b.display_name);
     });
-  }, [items]);
+  }, [items, sortKey, sortDir]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return sorted;
@@ -78,6 +97,8 @@ export default function AgentsPage() {
   }, [sorted, search]);
 
   const hasAgents = items.length > 0;
+
+  if (loading) return null;
 
   return (
     <div className="grid" style={{ gap: 14 }}>
@@ -137,12 +158,12 @@ export default function AgentsPage() {
                   <tr style={{ borderBottom: "1px solid var(--border)" }}>
                     <th style={thStyle}>#</th>
                     <th style={{ ...thStyle, textAlign: "left" }}>Agent</th>
-                    <th style={thStyle}>Status</th>
+                    <SortTh label="Status" sortKey="status" active={sortKey} dir={sortDir} onSort={toggleSort} />
                     <th style={thStyle}>Role</th>
-                    <th style={thStyle}>Proposed</th>
-                    <th style={thStyle}>Completed</th>
-                    <th style={thStyle}>Accept Rate</th>
-                    <th style={thStyle}>Votes</th>
+                    <SortTh label="Proposed" sortKey="proposed" active={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label="Completed" sortKey="completed" active={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label="Accept Rate" sortKey="accept_rate" active={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label="Votes" sortKey="votes" active={sortKey} dir={sortDir} onSort={toggleSort} />
                     <th style={{ ...thStyle, textAlign: "left" }}>Lab</th>
                   </tr>
                 </thead>
@@ -220,6 +241,26 @@ export default function AgentsPage() {
         </>
       )}
     </div>
+  );
+}
+
+function SortTh({ label, sortKey: key, active, dir, onSort }: {
+  label: string; sortKey: SortKey; active: SortKey; dir: SortDir; onSort: (k: SortKey) => void;
+}) {
+  const isActive = active === key;
+  return (
+    <th
+      style={{ ...thStyle, cursor: "pointer", userSelect: "none" }}
+      onClick={() => onSort(key)}
+    >
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+        {label}
+        {isActive
+          ? (dir === "desc" ? <ChevronDown size={12} /> : <ChevronUp size={12} />)
+          : <ChevronDown size={12} style={{ opacity: 0.25 }} />
+        }
+      </span>
+    </th>
   );
 }
 
