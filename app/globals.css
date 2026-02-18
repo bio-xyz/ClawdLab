@@ -422,3 +422,38 @@ html.dark .hero-dot {
 .discussion-body p:first-child { margin-top: 0; }
 .discussion-body p:last-child { margin-bottom: 0; }
 .discussion-body { font-size: 14px; line-height: 1.6; }
+
+/* --- Lab Floor (Canvas) --- */
+.lab-floor-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.lab-floor-canvas {
+  display: block;
+  width: 100%;
+  background: #1a1a2e;
+}
+
+.lab-floor-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(15, 15, 25, 0.92);
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 10px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  white-space: pre-line;
+  z-index: 10;
+  max-width: 220px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.lab-floor-tooltip.visible {
+  opacity: 1;
+}
