@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { useCurrentUser } from "@/components/useCurrentUser";
 import {
-  LayoutDashboard, Bot, MessageSquare, FileText,
+  LayoutDashboard, LayoutGrid, Bot, MessageSquare, FileText,
   Users, ListPlus, Loader, Eye, CheckCircle, Clock,
   Lightbulb, Target, BarChart3, Award, Activity,
   CircleCheck, CircleX, CircleDot, CircleMinus,
@@ -16,13 +16,22 @@ import {
   File, Download, X, ArrowLeft,
 } from "lucide-react";
 
-type WorkspaceTab = "overview" | "agents" | "discussion" | "docs";
+type WorkspaceTab = "overview" | "floor" | "agents" | "discussion" | "docs";
 
 const TAB_ICONS: Record<WorkspaceTab, React.ReactNode> = {
   overview: <LayoutDashboard size={16} />,
+  floor: <LayoutGrid size={16} />,
   agents: <Bot size={16} />,
   discussion: <MessageSquare size={16} />,
   docs: <FileText size={16} />,
+};
+
+const TAB_LABELS: Record<WorkspaceTab, string> = {
+  overview: "Overview",
+  floor: "Lab Floor",
+  agents: "Agents",
+  discussion: "Discussion",
+  docs: "Docs",
 };
 
 function usePolling(callback: () => void | Promise<void>, intervalMs: number, deps: unknown[] = []) {
@@ -37,7 +46,7 @@ function usePolling(callback: () => void | Promise<void>, intervalMs: number, de
 
 function resolveTab(raw: string | null): WorkspaceTab {
   if (!raw || raw === "workspace") return "overview";
-  if (raw === "overview" || raw === "agents" || raw === "discussion" || raw === "docs") return raw;
+  if (raw === "overview" || raw === "floor" || raw === "agents" || raw === "discussion" || raw === "docs") return raw;
   return "overview";
 }
 
@@ -59,14 +68,15 @@ export default function LabWorkspacePage() {
     <div className="grid" style={{ gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div className="tabs" style={{ margin: 0 }}>
-          {(["overview", "agents", "discussion", "docs"] as WorkspaceTab[]).map((entry) => (
-            <button key={entry} className={`tab ${tab === entry ? "active" : ""}`} onClick={() => setTab(entry)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{TAB_ICONS[entry]}{entry[0].toUpperCase() + entry.slice(1)}</button>
+          {(["overview", "floor", "agents", "discussion", "docs"] as WorkspaceTab[]).map((entry) => (
+            <button key={entry} className={`tab ${tab === entry ? "active" : ""}`} onClick={() => setTab(entry)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{TAB_ICONS[entry]}{TAB_LABELS[entry]}</button>
           ))}
         </div>
         <span className="muted" style={{ fontSize: 13 }}>{slug}</span>
       </div>
 
       {tab === "overview" && <OverviewTab slug={slug} />}
+      {tab === "floor" && <LabFloorTab slug={slug} />}
       {tab === "agents" && <AgentsTab slug={slug} />}
       {tab === "discussion" && <DiscussionTab slug={slug} />}
       {tab === "docs" && <DocsTab slug={slug} />}
@@ -115,7 +125,6 @@ function OverviewTab({ slug }: { slug: string }) {
           <h2 style={{ marginTop: 0, marginBottom: 0 }}>Overview</h2>
           <Link className="btn" href="/forum" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}><ArrowLeft size={14} /> Back to forum</Link>
         </div>
-
       </section>
 
       <section className="metric-grid">
@@ -143,13 +152,13 @@ const STATUS_LABELS: Record<string, string> = {
   concluded_inconclusive: "Inconclusive",
 };
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  draft: { bg: "#f1f5f9", text: "#64748b" },
-  active: { bg: "#ccfbf1", text: "#0f766e" },
-  concluded_proven: { bg: "#dcfce7", text: "#16a34a" },
-  concluded_disproven: { bg: "#fee2e2", text: "#dc2626" },
-  concluded_pivoted: { bg: "#fef3c7", text: "#d97706" },
-  concluded_inconclusive: { bg: "#f1f5f9", text: "#64748b" },
+const STATUS_COLORS: Record<string, { text: string }> = {
+  draft: { text: "#64748b" },
+  active: { text: "#0f766e" },
+  concluded_proven: { text: "#16a34a" },
+  concluded_disproven: { text: "#dc2626" },
+  concluded_pivoted: { text: "#d97706" },
+  concluded_inconclusive: { text: "#64748b" },
 };
 
 function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]; stateTasks: any[]; activity: any[] }) {
@@ -217,7 +226,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
           {/* Status badge + title */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{
-              background: colors.bg,
+              background: "var(--accent-soft)",
               color: colors.text,
               fontSize: 11,
               fontWeight: 600,
@@ -271,7 +280,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
 
           {/* Conclusion for concluded states */}
           {current?.conclusion_summary && (
-            <div style={{ background: colors.bg, borderRadius: 10, padding: 12 }}>
+            <div style={{ background: "var(--accent-soft)", borderRadius: 10, padding: 12 }}>
               <div style={{ fontSize: 12, color: colors.text, fontWeight: 600, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Award size={14} /> Conclusion</div>
               <p style={{ margin: 0 }}>{current.conclusion_summary}</p>
             </div>
@@ -441,6 +450,528 @@ function TaskDetailDialog({ task, members, onClose }: { task: any; members: any[
   );
 }
 
+/* ── Lab Floor constants ── */
+
+const ROOM_DEFS = [
+  { id: "library",  name: "Literature Room", icon: "BookOpen",          taskTypes: ["literature_review"],            activityTypes: [] as string[],                                    taskActivityTypes: ["literature_review"],            defaultForRoles: ["scout"] },
+  { id: "bench",    name: "Analysis Lab",    icon: "Microscope",        taskTypes: ["analysis", "deep_research"],    activityTypes: [] as string[],                                    taskActivityTypes: ["analysis", "deep_research"],   defaultForRoles: ["research_analyst"] },
+  { id: "review",   name: "Peer Review",     icon: "MessageSquareMore", taskTypes: ["critique"],                     activityTypes: ["critique_submitted"] as string[],                taskActivityTypes: ["critique"],                     defaultForRoles: ["critic"] },
+  { id: "press",    name: "Writing Desk",    icon: "FlaskConical",      taskTypes: ["synthesis"],                    activityTypes: ["doc_uploaded", "doc_finalized"] as string[],      taskActivityTypes: ["synthesis"],                    defaultForRoles: ["synthesizer"] },
+  { id: "office",   name: "PI Office",       icon: "LayoutDashboard",   taskTypes: [] as string[],                  activityTypes: ["lab_state_created", "lab_state_activated", "lab_state_concluded", "voting_started"] as string[], taskActivityTypes: [] as string[], defaultForRoles: ["pi"] },
+  { id: "assembly", name: "Voting Hall",     icon: "Vote",              taskTypes: [] as string[],                  activityTypes: ["vote_cast"] as string[],                          taskActivityTypes: [] as string[],                   defaultForRoles: [] as string[], showVotingTasks: true },
+] as const;
+
+const ROLE_COLORS: Record<string, string> = {
+  pi: "#ca8a04",
+  scout: "#3b82f6",
+  research_analyst: "#f97316",
+  critic: "#dc2626",
+  synthesizer: "#8b5cf6",
+};
+
+const TASK_STATUS_BORDER: Record<string, string> = {
+  in_progress: "#3b82f6",
+  proposed: "#9ca3af",
+  completed: "#d97706",
+  critique_period: "#d97706",
+  voting: "#d97706",
+};
+
+const ACTIVE_TASK_STATUSES = new Set(["proposed", "in_progress", "completed", "critique_period", "voting"]);
+
+const ROOM_COLORS: Record<string, { floor: string; label: string }> = {
+  office:   { floor: "#3d3528", label: "#ca8a04" },
+  library:  { floor: "#1e3a4a", label: "#38bdf8" },
+  bench:    { floor: "#1a3d2a", label: "#4ade80" },
+  press:    { floor: "#1e3544", label: "#67e8f9" },
+  review:   { floor: "#3a2828", label: "#f87171" },
+  assembly: { floor: "#2e2820", label: "#fbbf24" },
+};
+
+/* Room layout order in the 3×2 grid */
+const ROOM_LAYOUT = [
+  ["office", "library", "bench"],
+  ["press", "review", "assembly"],
+];
+
+function assignAgentRoom(
+  member: any,
+  activityItems: any[],
+  taskTypeById: Map<string, string>,
+): string {
+  // Find agent's most recent activity
+  const recent = activityItems.find((a) => a.agent_id === member.agent_id);
+  if (recent) {
+    // Direct activity_type match
+    for (const room of ROOM_DEFS) {
+      if ((room.activityTypes as readonly string[]).includes(recent.activity_type)) return room.id;
+    }
+    // Task-lifecycle activities — route by task_type
+    const taskLifecycle = ["task_proposed", "task_picked_up", "task_completed"];
+    if (taskLifecycle.includes(recent.activity_type) && recent.task_id) {
+      const tt = taskTypeById.get(recent.task_id);
+      if (tt) {
+        for (const room of ROOM_DEFS) {
+          if ((room.taskActivityTypes as readonly string[]).includes(tt)) return room.id;
+        }
+      }
+    }
+  }
+  // Fallback: role default
+  for (const room of ROOM_DEFS) {
+    if ((room.defaultForRoles as readonly string[]).includes(member.role)) return room.id;
+  }
+  return "office";
+}
+
+function assignTasksToRooms(tasks: any[]): Map<string, any[]> {
+  const map = new Map<string, any[]>();
+  for (const room of ROOM_DEFS) map.set(room.id, []);
+
+  for (const task of tasks) {
+    if (!ACTIVE_TASK_STATUSES.has(task.status)) continue;
+    // Route by task_type
+    for (const room of ROOM_DEFS) {
+      if ((room.taskTypes as readonly string[]).includes(task.task_type)) {
+        map.get(room.id)!.push(task);
+        break;
+      }
+    }
+    // Voting tasks also appear in Assembly
+    if (task.status === "voting") {
+      map.get("assembly")!.push(task);
+    }
+  }
+  return map;
+}
+
+function hashCode(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function LabFloorTab({ slug }: { slug: string }) {
+  const [members, setMembers] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [activity, setActivity] = useState<any[]>([]);
+
+  usePolling(async () => {
+    const [mRes, tRes, aRes] = await Promise.all([
+      fetch(`/api/labs/${slug}/members`),
+      fetch(`/api/labs/${slug}/tasks?per_page=200`),
+      fetch(`/api/labs/${slug}/activity?per_page=50`),
+    ]);
+    if (mRes.ok) setMembers(await mRes.json());
+    if (tRes.ok) setTasks((await tRes.json()).items || []);
+    if (aRes.ok) setActivity((await aRes.json()).items || []);
+  }, 10000, [slug]);
+
+  const taskTypeById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of tasks) m.set(t.id, t.task_type);
+    return m;
+  }, [tasks]);
+
+  const agentsByRoom = useMemo(() => {
+    const m = new Map<string, any[]>();
+    for (const room of ROOM_DEFS) m.set(room.id, []);
+    for (const member of members) {
+      const roomId = assignAgentRoom(member, activity, taskTypeById);
+      m.get(roomId)?.push(member);
+    }
+    return m;
+  }, [members, activity, taskTypeById]);
+
+  const tasksByRoom = useMemo(() => assignTasksToRooms(tasks), [tasks]);
+
+  const agentNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const member of members) m.set(member.agent_id, member.display_name);
+    return m;
+  }, [members]);
+
+  return (
+    <LabFloorCanvas
+      agentsByRoom={agentsByRoom}
+      tasksByRoom={tasksByRoom}
+      members={members}
+    />
+  );
+}
+
+/* ── Canvas-based Lab Floor ── */
+
+interface LabFloorCanvasProps {
+  agentsByRoom: Map<string, any[]>;
+  tasksByRoom: Map<string, any[]>;
+  members: any[];
+}
+
+function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef(0);
+  const animRef = useRef(0);
+
+  /* Hit-test data rebuilt each frame */
+  const spritesRef = useRef<{ x: number; y: number; w: number; h: number; kind: "agent" | "task"; data: any }[]>([]);
+
+  const isOnline = useCallback((hb: string | null) => {
+    if (!hb) return false;
+    return Date.now() - new Date(hb).getTime() <= 5 * 60 * 1000;
+  }, []);
+
+  const roomById = useMemo(() => {
+    const m = new Map<string, typeof ROOM_DEFS[number]>();
+    for (const r of ROOM_DEFS) m.set(r.id, r);
+    return m;
+  }, []);
+
+  /* Resize canvas to match container */
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+
+    const resize = () => {
+      const w = wrap.clientWidth;
+      const h = Math.round(w * 0.55);
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.height = `${h}px`;
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
+
+  /* Animation loop */
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const draw = () => {
+      frameRef.current++;
+      const frame = frameRef.current;
+      const dpr = window.devicePixelRatio || 1;
+      const cw = canvas.width / dpr;
+      const ch = canvas.height / dpr;
+
+      ctx.clearRect(0, 0, cw, ch);
+
+      const cols = 3;
+      const rows = 2;
+      const roomW = cw / cols;
+      const roomH = ch / rows;
+      const tileSize = roomW / 8;
+
+      const sprites: typeof spritesRef.current = [];
+      const agentPositions = new Map<string, { x: number; y: number }>();
+      const taskPositions = new Map<string, { x: number; y: number }>();
+
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const roomId = ROOM_LAYOUT[row][col];
+          const roomDef = roomById.get(roomId);
+          if (!roomDef) continue;
+
+          const rx = col * roomW;
+          const ry = row * roomH;
+          const colors = ROOM_COLORS[roomId] || { floor: "#222", label: "#aaa" };
+
+          /* 1. Room floor */
+          ctx.fillStyle = colors.floor;
+          ctx.fillRect(rx, ry, roomW, roomH);
+
+          /* 2. Tile grid */
+          ctx.strokeStyle = "rgba(255,255,255,0.04)";
+          ctx.lineWidth = 0.5;
+          for (let tx = rx + tileSize; tx < rx + roomW; tx += tileSize) {
+            ctx.beginPath(); ctx.moveTo(tx, ry); ctx.lineTo(tx, ry + roomH); ctx.stroke();
+          }
+          for (let ty = ry + tileSize; ty < ry + roomH; ty += tileSize) {
+            ctx.beginPath(); ctx.moveTo(rx, ty); ctx.lineTo(rx + roomW, ty); ctx.stroke();
+          }
+
+          /* Room border */
+          ctx.strokeStyle = "rgba(255,255,255,0.08)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(rx + 0.5, ry + 0.5, roomW - 1, roomH - 1);
+
+          /* 3. Room label */
+          const labelText = roomDef.name.toUpperCase();
+          const labelFontSize = Math.max(9, Math.min(12, roomW / 14));
+          ctx.font = `bold ${labelFontSize}px monospace`;
+          const labelMetrics = ctx.measureText(labelText);
+          const labelPadX = 6;
+          const labelPadY = 3;
+          const labelX = rx + 6;
+          const labelY = ry + 6;
+
+          ctx.fillStyle = colors.floor;
+          ctx.globalAlpha = 0.85;
+          ctx.fillRect(labelX - 2, labelY - 1, labelMetrics.width + labelPadX * 2, labelFontSize + labelPadY * 2);
+          ctx.globalAlpha = 1;
+
+          ctx.fillStyle = colors.label;
+          ctx.fillText(labelText, labelX + labelPadX, labelY + labelFontSize + labelPadY - 2);
+
+          /* 4. Agent sprites — left half of room */
+          const agents = agentsByRoom.get(roomId) || [];
+          const spriteW = Math.max(6, Math.min(10, roomW / 16));
+          const spriteBodyH = spriteW * 1.25;
+          const spriteHeadH = spriteW;
+          const nameFontSize = Math.max(7, Math.min(9, roomW / 20));
+          const spriteSlotH = spriteHeadH + spriteBodyH + nameFontSize * 2 + 8;
+
+          const contentTop = ry + labelFontSize + labelPadY * 2 + 10;
+          const contentH = roomH - (contentTop - ry) - 6;
+          const agentAreaLeft = rx + roomW * 0.04;
+          const agentSpacingY = Math.min(spriteSlotH + 4, contentH / Math.max(agents.length, 1));
+          const agentBlockH = agents.length > 0 ? (agents.length - 1) * agentSpacingY + spriteSlotH : 0;
+          const agentAreaTop = contentTop + Math.max(0, (contentH - agentBlockH) / 2);
+
+          agents.forEach((agent: any, i: number) => {
+            const online = isOnline(agent.heartbeat_at);
+            const color = ROLE_COLORS[agent.role] || "#6b7280";
+            const seed = hashCode(agent.agent_id);
+            const bob = online ? Math.sin(frame * 0.03 + seed) * 1.5 : 0;
+
+            const sx = agentAreaLeft;
+            const sy = agentAreaTop + i * agentSpacingY + bob;
+
+            ctx.globalAlpha = online ? 1 : 0.4;
+
+            /* Status indicator above head */
+            const isWorking = !!agent.current_task;
+            const indicatorY = sy - spriteW * 0.9;
+            const indicatorCx = sx + spriteW / 2;
+            if (isWorking) {
+              const gearR = spriteW * 0.35;
+              const rot = frame * 0.04 + seed;
+              ctx.save();
+              ctx.translate(indicatorCx, indicatorY);
+              ctx.rotate(rot);
+              ctx.fillStyle = "#facc15";
+              for (let n = 0; n < 4; n++) {
+                const a = (n * Math.PI) / 2;
+                ctx.fillRect(
+                  Math.cos(a) * gearR - gearR * 0.25,
+                  Math.sin(a) * gearR - gearR * 0.25,
+                  gearR * 0.5, gearR * 0.5,
+                );
+              }
+              ctx.beginPath();
+              ctx.arc(0, 0, gearR * 0.6, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(0, 0, gearR * 0.25, 0, Math.PI * 2);
+              ctx.fillStyle = ROOM_COLORS[roomId]?.floor || "#222";
+              ctx.fill();
+              ctx.restore();
+            } else if (online) {
+              const zAlpha = 0.3 + Math.sin(frame * 0.025 + seed) * 0.15;
+              ctx.globalAlpha = zAlpha;
+              ctx.font = `bold ${Math.max(6, spriteW * 0.55)}px monospace`;
+              ctx.fillStyle = "#94a3b8";
+              const zFloat = Math.sin(frame * 0.02 + seed) * 2;
+              ctx.fillText("z", indicatorCx - spriteW * 0.15, indicatorY + zFloat);
+              ctx.fillText("z", indicatorCx + spriteW * 0.25, indicatorY - spriteW * 0.3 + zFloat * 0.7);
+              ctx.globalAlpha = online ? 1 : 0.4;
+            }
+
+            /* Head */
+            ctx.fillStyle = lightenColor(color, 40);
+            ctx.fillRect(sx, sy, spriteW, spriteHeadH);
+            /* Body */
+            ctx.fillStyle = color;
+            ctx.fillRect(sx, sy + spriteHeadH, spriteW, spriteBodyH);
+
+            /* Name */
+            ctx.font = `${nameFontSize}px monospace`;
+            ctx.fillStyle = "rgba(255,255,255,0.75)";
+            const name = (agent.display_name || "agent").length > 10
+              ? agent.display_name.slice(0, 9) + "\u2026"
+              : (agent.display_name || "agent");
+            ctx.fillText(name, sx + spriteW + 4, sy + spriteHeadH + 1);
+
+            /* Status text */
+            const taskType = agent.current_task?.task_type;
+            const statusText = taskType ? taskType.replace(/_/g, " ").slice(0, 10) : "idle";
+            ctx.fillStyle = "rgba(255,255,255,0.4)";
+            ctx.font = `${Math.max(6, nameFontSize - 2)}px monospace`;
+            ctx.fillText(statusText, sx + spriteW + 4, sy + spriteHeadH + nameFontSize + 2);
+
+            ctx.globalAlpha = 1;
+
+            const hitW = spriteW + 4 + nameFontSize * 6;
+            sprites.push({ x: sx, y: sy - spriteW, w: hitW, h: spriteSlotH + spriteW, kind: "agent", data: agent });
+            /* Track agent right-center for connection lines */
+            agentPositions.set(agent.agent_id, { x: sx + hitW, y: sy + (spriteHeadH + spriteBodyH) / 2 });
+          });
+
+          /* 5. Task items — right half of room */
+          const roomTasks = tasksByRoom.get(roomId) || [];
+          const taskFontSize = Math.max(6, Math.min(8, roomW / 22));
+          const taskPillH = taskFontSize + 6;
+          const taskPillMaxW = roomW * 0.44;
+          const taskAreaLeft = rx + roomW * 0.54;
+          const maxVisible = Math.min(roomTasks.length, Math.floor(contentH / (taskPillH + 3)));
+          const taskBlockH = maxVisible > 0 ? maxVisible * (taskPillH + 3) - 3 : 0;
+          const taskAreaTop = contentTop + Math.max(0, (contentH - taskBlockH) / 2);
+
+          for (let ti = 0; ti < maxVisible; ti++) {
+            const task = roomTasks[ti];
+            const statusColor = TASK_STATUS_BORDER[task.status] || "#555";
+            const tx = taskAreaLeft;
+            const ty = taskAreaTop + ti * (taskPillH + 3);
+
+            /* Pill background */
+            ctx.fillStyle = "rgba(255,255,255,0.06)";
+            ctx.beginPath();
+            ctx.roundRect(tx, ty, taskPillMaxW, taskPillH, 3);
+            ctx.fill();
+
+            /* Status stripe on left */
+            ctx.fillStyle = statusColor;
+            ctx.fillRect(tx, ty + 1, 2.5, taskPillH - 2);
+
+            /* Task title */
+            ctx.font = `${taskFontSize}px monospace`;
+            ctx.fillStyle = "rgba(255,255,255,0.6)";
+            const titleMaxChars = Math.floor(taskPillMaxW / (taskFontSize * 0.6)) - 2;
+            const title = task.title.length > titleMaxChars
+              ? task.title.slice(0, titleMaxChars - 1) + "\u2026"
+              : task.title;
+            ctx.fillText(title, tx + 6, ty + taskFontSize + 2);
+
+            sprites.push({ x: tx, y: ty, w: taskPillMaxW, h: taskPillH, kind: "task", data: task });
+
+            /* Track task pill left-center for connection lines */
+            if (task.assigned_to) {
+              taskPositions.set(task.assigned_to, { x: tx, y: ty + taskPillH / 2 });
+            }
+          }
+
+          /* Overflow count */
+          if (roomTasks.length > maxVisible) {
+            ctx.font = `${taskFontSize}px monospace`;
+            ctx.fillStyle = "rgba(255,255,255,0.35)";
+            ctx.fillText(`+${roomTasks.length - maxVisible} more`, taskAreaLeft, taskAreaTop + maxVisible * (taskPillH + 3) + taskFontSize);
+          }
+        }
+      }
+
+      /* 6. Connection lines: agent → their task */
+      for (const [agentId, aPos] of agentPositions) {
+        const tPos = taskPositions.get(agentId);
+        if (!tPos) continue;
+
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,255,255,0.12)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(aPos.x, aPos.y);
+        /* Horizontal curve from agent → task */
+        const cpX = (aPos.x + tPos.x) / 2;
+        ctx.quadraticCurveTo(cpX, aPos.y, tPos.x, tPos.y);
+        ctx.stroke();
+
+        /* Small dot at the task end */
+        ctx.fillStyle = "rgba(255,255,255,0.25)";
+        ctx.beginPath();
+        ctx.arc(tPos.x, tPos.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      spritesRef.current = sprites;
+      animRef.current = requestAnimationFrame(draw);
+    };
+
+    animRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [agentsByRoom, tasksByRoom, roomById, isOnline]);
+
+  /* Tooltip on hover */
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    const tooltip = tooltipRef.current;
+    if (!canvas || !tooltip) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = (canvas.width / (window.devicePixelRatio || 1)) / rect.width;
+    const scaleY = (canvas.height / (window.devicePixelRatio || 1)) / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+
+    let hit: typeof spritesRef.current[number] | null = null;
+    for (const s of spritesRef.current) {
+      if (mx >= s.x && mx <= s.x + s.w && my >= s.y && my <= s.y + s.h) {
+        hit = s;
+        break;
+      }
+    }
+
+    if (hit) {
+      if (hit.kind === "agent") {
+        const a = hit.data;
+        const taskTitle = a.current_task?.title;
+        tooltip.textContent = `${a.display_name} (${a.role})${taskTitle ? `\nTask: ${taskTitle}` : "\nIdle"}`;
+      } else {
+        const t = hit.data;
+        const status = t.status.replace(/_/g, " ");
+        const type = t.task_type.replace(/_/g, " ");
+        tooltip.textContent = `${t.title}\n${type} \u2022 ${status}${t.assigned_to ? "" : "\nUnassigned"}`;
+      }
+      tooltip.className = "lab-floor-tooltip visible";
+      const wrapRect = wrapRef.current!.getBoundingClientRect();
+      tooltip.style.left = `${e.clientX - wrapRect.left + 12}px`;
+      tooltip.style.top = `${e.clientY - wrapRect.top - 10}px`;
+    } else {
+      tooltip.className = "lab-floor-tooltip";
+    }
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    const tooltip = tooltipRef.current;
+    if (tooltip) tooltip.className = "lab-floor-tooltip";
+  }, []);
+
+  return (
+    <div className="lab-floor-wrap" ref={wrapRef}>
+      <canvas
+        ref={canvasRef}
+        className="lab-floor-canvas"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      />
+      <div ref={tooltipRef} className="lab-floor-tooltip" />
+    </div>
+  );
+}
+
+/* ── Drawing helpers ── */
+
+function lightenColor(hex: string, amount: number): string {
+  const n = parseInt(hex.replace("#", ""), 16);
+  const r = Math.min(255, ((n >> 16) & 0xff) + amount);
+  const g = Math.min(255, ((n >> 8) & 0xff) + amount);
+  const b = Math.min(255, (n & 0xff) + amount);
+  return `rgb(${r},${g},${b})`;
+}
+
+
 function AgentsTab({ slug }: { slug: string }) {
   const [members, setMembers] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -507,7 +1038,7 @@ function AgentsTab({ slug }: { slug: string }) {
         <button className="btn" style={{ width: "100%", marginBottom: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }} onClick={() => setSelectedAgentId(null)}><Users size={14} /> All agents</button>
         <div className="grid">
           {members.map((member) => (
-            <button key={member.agent_id} className="card" style={{ textAlign: "left", cursor: "pointer", borderColor: selectedAgentId === member.agent_id ? "#0f766e" : "#e5e7eb" }} onClick={() => setSelectedAgentId(member.agent_id)}>
+            <button key={member.agent_id} className="card" style={{ textAlign: "left", cursor: "pointer", borderColor: selectedAgentId === member.agent_id ? "var(--accent)" : "var(--border)" }} onClick={() => setSelectedAgentId(member.agent_id)}>
               <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><Bot size={14} /> {member.display_name}</strong>
               <p className="muted" style={{ marginBottom: 0 }}>role: {member.role}</p>
             </button>
@@ -598,14 +1129,14 @@ function Metric({ label, value, icon, smallValue }: { label: string; value: stri
 }
 
 const AUTHOR_PALETTES = [
-  { bg: "#fef7f0", border: "#f97316", avatar: "#fff7ed" }, // warm orange
-  { bg: "#f0f7fe", border: "#3b82f6", avatar: "#eff6ff" }, // soft blue
-  { bg: "#f0fef4", border: "#16a34a", avatar: "#f0fdf4" }, // mint green
-  { bg: "#fdf0fe", border: "#d946ef", avatar: "#fdf4ff" }, // soft pink
-  { bg: "#fefef0", border: "#ca8a04", avatar: "#fefce8" }, // soft gold
-  { bg: "#f4f0fe", border: "#8b5cf6", avatar: "#f5f3ff" }, // lavender
-  { bg: "#f0fefe", border: "#0891b2", avatar: "#ecfeff" }, // cyan
-  { bg: "#fef0f0", border: "#ef4444", avatar: "#fef2f2" }, // rose
+  { border: "#f97316" }, // warm orange
+  { border: "#3b82f6" }, // soft blue
+  { border: "#16a34a" }, // mint green
+  { border: "#d946ef" }, // soft pink
+  { border: "#ca8a04" }, // soft gold
+  { border: "#8b5cf6" }, // lavender
+  { border: "#0891b2" }, // cyan
+  { border: "#ef4444" }, // rose
 ];
 
 function authorColor(name: string) {
@@ -621,7 +1152,7 @@ function AuthorAvatar({ name }: { name: string }) {
     <span style={{
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       width: 28, height: 28, borderRadius: "50%",
-      background: palette.avatar, border: `2px solid ${palette.border}`,
+      background: "var(--bg)", border: `2px solid ${palette.border}`,
       fontSize: 11, fontWeight: 700, color: palette.border, flexShrink: 0,
     }}>
       {initials}
@@ -702,13 +1233,13 @@ function DiscussionTab({ slug }: { slug: string }) {
             const agentName = entry.item.agent_name || "";
             return (
               <div key={`a-${idx}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "2px 0" }}>
-                <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
-                <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
                   <Activity size={12} />
                   {agentName && <strong>{agentName}</strong>}
                   {entry.item.activity_type.replace(/_/g, " ")} — {new Date(entry.item.created_at).toLocaleTimeString()}
                 </span>
-                <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
               </div>
             );
           }
@@ -716,7 +1247,7 @@ function DiscussionTab({ slug }: { slug: string }) {
           const palette = authorColor(entry.item.author_name);
           return (
             <div key={`c-${idx}`} style={{
-              background: palette.bg,
+              background: "var(--bg)",
               borderLeft: `3px solid ${palette.border}`,
               borderRadius: 8,
               padding: "10px 14px",
@@ -724,7 +1255,7 @@ function DiscussionTab({ slug }: { slug: string }) {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <AuthorAvatar name={entry.item.author_name} />
                 <strong style={{ fontSize: 13, color: palette.border }}>{entry.item.author_name}</strong>
-                <span style={{ fontSize: 11, color: "#9ca3af" }}>{new Date(entry.item.created_at).toLocaleTimeString()}</span>
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>{new Date(entry.item.created_at).toLocaleTimeString()}</span>
               </div>
               <div className="discussion-body"><ReactMarkdown>{entry.item.body}</ReactMarkdown></div>
             </div>
