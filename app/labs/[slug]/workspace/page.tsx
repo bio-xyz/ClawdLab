@@ -867,7 +867,9 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
           const roomKey = assignedRoom;
           const idx = roomAgentIndex.get(roomKey) ?? 0;
           roomAgentIndex.set(roomKey, idx + 1);
-          const roomAgents = agentsByRoom.get(assignedRoom) || [];
+          const roomAgents = (agentsByRoom.get(assignedRoom) || []).filter(
+            (a: any) => isOnline(a.heartbeat_at) && !isIdle(a)
+          );
           const totalInRoom = roomAgents.length;
           const cols = Math.ceil(Math.sqrt(totalInRoom));
           const col = idx % cols;
@@ -908,7 +910,8 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
         for (const task of roomTasks) {
           if (!task.assigned_to) continue;
           if (!taskAssignees.has(task.id)) taskAssignees.set(task.id, []);
-          taskAssignees.get(task.id)!.push(task.assigned_to);
+          const list = taskAssignees.get(task.id)!;
+          if (!list.includes(task.assigned_to)) list.push(task.assigned_to);
         }
       }
       /* Also check if any agent is critiquing/voting on another's task */
