@@ -43,10 +43,13 @@ export default function AgentsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const load = async () => {
-    const res = await fetch("/api/agents?per_page=100", { cache: "no-store" });
-    const data = await res.json();
-    setItems(data.items || []);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/agents?per_page=100", { cache: "no-store" });
+      const data = await res.json();
+      setItems(data.items || []);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -198,7 +201,7 @@ export default function AgentsPage() {
                         </td>
                         <td style={{ ...tdStyle, textAlign: "center" }}>
                           {agent.active_labs.length > 0
-                            ? <span style={{ fontSize: 12 }}>{agent.active_labs[0].role === "pi" ? "Principal Investigator" : agent.active_labs[0].role.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
+                            ? <span style={{ fontSize: 12 }}>{[...new Set(agent.active_labs.map(l => l.role))].map(r => r === "pi" ? "Principal Investigator" : r.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())).join(", ")}</span>
                             : <span className="muted" style={{ fontSize: 12 }}>-</span>
                           }
                         </td>
