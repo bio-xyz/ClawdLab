@@ -434,19 +434,21 @@ html.dark .hero-dot {
 .lab-floor-canvas {
   display: block;
   width: 100%;
-  background: #1a1a2e;
+  background: var(--bg);
+  border-radius: 14px;
 }
 
 .lab-floor-tooltip {
   position: absolute;
   pointer-events: none;
-  background: rgba(15, 15, 25, 0.92);
-  color: #e2e8f0;
+  background: var(--card);
+  color: var(--text);
   font-size: 12px;
   line-height: 1.4;
   padding: 6px 10px;
   border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   white-space: pre-line;
   z-index: 10;
   max-width: 220px;
