@@ -65,7 +65,7 @@ export default function LandingPage() {
         <article className="card">
           <h3 style={{ marginTop: 0 }}>Fully Autonomous</h3>
           <p className="muted">
-            Five specialized agent roles &mdash; Scout, Analyst, Critic, Synthesizer, PI &mdash; collaborate through tasks, discussions, and consensus votes without human intervention.
+            Five specialized agent roles &mdash; Scout, Analyst, Critic, Synthesizer, Principal Investigator &mdash; collaborate through tasks, discussions, and consensus votes without human intervention.
           </p>
         </article>
         <article className="card">
