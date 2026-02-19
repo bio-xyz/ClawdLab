@@ -31,7 +31,7 @@ const TAB_LABELS: Record<WorkspaceTab, string> = {
   floor: "Lab Floor",
   agents: "Agents",
   discussion: "Discussion",
-  docs: "Docs",
+  docs: "Documentation",
 };
 
 function usePolling(callback: () => void | Promise<void>, intervalMs: number, deps: unknown[] = []) {
@@ -54,9 +54,17 @@ export default function LabWorkspacePage() {
   const params = useParams<{ slug: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const [labName, setLabName] = useState<string>("");
 
   const slug = params.slug;
   const tab = resolveTab(searchParams.get("tab"));
+
+  useEffect(() => {
+    fetch(`/api/labs/${slug}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.name) setLabName(data.name); })
+      .catch(() => {});
+  }, [slug]);
 
   const setTab = (next: WorkspaceTab) => {
     const qs = new URLSearchParams(searchParams.toString());
@@ -75,7 +83,7 @@ export default function LabWorkspacePage() {
         <span className="muted" style={{ fontSize: 13 }}>{slug}</span>
       </div>
 
-      {tab === "overview" && <OverviewTab slug={slug} />}
+      {tab === "overview" && <OverviewTab slug={slug} labName={labName} />}
       {tab === "floor" && <LabFloorTab slug={slug} />}
       {tab === "agents" && <AgentsTab slug={slug} />}
       {tab === "discussion" && <DiscussionTab slug={slug} />}
@@ -84,7 +92,7 @@ export default function LabWorkspacePage() {
   );
 }
 
-function OverviewTab({ slug }: { slug: string }) {
+function OverviewTab({ slug, labName }: { slug: string; labName: string }) {
   const [stats, setStats] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [docs, setDocs] = useState<any[]>([]);
@@ -122,7 +130,7 @@ function OverviewTab({ slug }: { slug: string }) {
     <div className="grid" style={{ gap: 12 }}>
       <section className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Overview</h2>
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>{labName ? `${labName} Overview` : "Lab Overview"}</h2>
           <Link className="btn" href="/forum" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}><ArrowLeft size={14} /> Back to forum</Link>
         </div>
       </section>
@@ -133,7 +141,7 @@ function OverviewTab({ slug }: { slug: string }) {
         <Metric icon={<Loader size={14} />} label="Tasks in progress" value={stats?.in_progress || 0} />
         <Metric icon={<Eye size={14} />} label="Tasks review" value={(stats?.completed || 0) + (stats?.voting || 0)} />
         <Metric icon={<CheckCircle size={14} />} label="Tasks resolved" value={(stats?.accepted || 0) + (stats?.rejected || 0) + (stats?.superseded || 0)} />
-        <Metric icon={<FileText size={14} />} label="Docs count" value={docs.length} />
+        <Metric icon={<FileText size={14} />} label="Documentation count" value={docs.length} />
         <Metric icon={<Clock size={14} />} label="Last activity" value={activity[0]?.created_at ? new Date(activity[0].created_at).toLocaleString() : "—"} smallValue />
       </section>
 
@@ -172,7 +180,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
     return (
       <section className="card">
         <h3 style={{ marginTop: 0 }}>Research State</h3>
-        <p className="muted">No research state defined yet. A PI agent will create one.</p>
+        <p className="muted">No research state defined yet. A Principal Investigator agent will create one.</p>
       </section>
     );
   }
@@ -478,20 +486,6 @@ const TASK_STATUS_BORDER: Record<string, string> = {
 
 const ACTIVE_TASK_STATUSES = new Set(["proposed", "in_progress", "completed", "voting"]);
 
-const ROOM_COLORS: Record<string, { floor: string; label: string }> = {
-  office:   { floor: "#3d3528", label: "#ca8a04" },
-  library:  { floor: "#1e3a4a", label: "#38bdf8" },
-  bench:    { floor: "#1a3d2a", label: "#4ade80" },
-  press:    { floor: "#1e3544", label: "#67e8f9" },
-  review:   { floor: "#3a2828", label: "#f87171" },
-  assembly: { floor: "#2e2820", label: "#fbbf24" },
-};
-
-/* Room layout order in the 3×2 grid */
-const ROOM_LAYOUT = [
-  ["office", "library", "bench"],
-  ["press", "review", "assembly"],
-];
 
 function assignAgentRoom(
   member: any,
@@ -584,12 +578,6 @@ function LabFloorTab({ slug }: { slug: string }) {
 
   const tasksByRoom = useMemo(() => assignTasksToRooms(tasks), [tasks]);
 
-  const agentNameById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const member of members) m.set(member.agent_id, member.display_name);
-    return m;
-  }, [members]);
-
   return (
     <LabFloorCanvas
       agentsByRoom={agentsByRoom}
@@ -599,7 +587,28 @@ function LabFloorTab({ slug }: { slug: string }) {
   );
 }
 
-/* ── Canvas-based Lab Floor ── */
+/* ── Canvas-based Lab Floor (radial layout with coffee corner) ── */
+
+const ROOM_POSITIONS: Record<string, { x: number; y: number }> = {
+  office:   { x: 0.17, y: 0.22 },
+  library:  { x: 0.50, y: 0.22 },
+  bench:    { x: 0.83, y: 0.22 },
+  press:    { x: 0.17, y: 0.78 },
+  review:   { x: 0.50, y: 0.78 },
+  assembly: { x: 0.83, y: 0.78 },
+};
+
+/* Per-room tints derived from role colors */
+const ROOM_TINTS: Record<string, string> = {
+  office:   "rgba(234,179,8,0.12)",
+  library:  "rgba(96,165,250,0.12)",
+  bench:    "rgba(251,146,60,0.12)",
+  press:    "rgba(167,139,250,0.12)",
+  review:   "rgba(248,113,113,0.12)",
+  assembly: "rgba(251,191,36,0.12)",
+};
+
+const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
 
 interface LabFloorCanvasProps {
   agentsByRoom: Map<string, any[]>;
@@ -614,18 +623,47 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
   const frameRef = useRef(0);
   const animRef = useRef(0);
 
+  /* Animated positions: lerp toward targets each frame */
+  const agentAnimPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
+
   /* Hit-test data rebuilt each frame */
-  const spritesRef = useRef<{ x: number; y: number; w: number; h: number; kind: "agent" | "task"; data: any }[]>([]);
+  const hitsRef = useRef<{ x: number; y: number; r: number; data: any }[]>([]);
+
+  /* Cache CSS var colors — refreshed on resize */
+  const cssColorsRef = useRef({
+    bg: "#f8fafc",
+    card: "#ffffff",
+    border: "#e5e7eb",
+    muted: "#6b7280",
+    accentSoft: "#ccfbf1",
+    text: "#111827",
+  });
 
   const isOnline = useCallback((hb: string | null) => {
     if (!hb) return false;
     return Date.now() - new Date(hb).getTime() <= 5 * 60 * 1000;
   }, []);
 
-  const roomById = useMemo(() => {
-    const m = new Map<string, typeof ROOM_DEFS[number]>();
-    for (const r of ROOM_DEFS) m.set(r.id, r);
-    return m;
+  const isIdle = useCallback((agent: any) => {
+    if (agent.current_task) return false;
+    if (!agent.heartbeat_at) return true;
+    const lastBeat = new Date(agent.heartbeat_at).getTime();
+    return Date.now() - lastBeat > IDLE_THRESHOLD_MS;
+  }, []);
+
+  /* Read CSS variables from computed style */
+  const readCssColors = useCallback(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const s = getComputedStyle(el);
+    cssColorsRef.current = {
+      bg: s.getPropertyValue("--bg").trim() || "#f8fafc",
+      card: s.getPropertyValue("--card").trim() || "#ffffff",
+      border: s.getPropertyValue("--border").trim() || "#e5e7eb",
+      muted: s.getPropertyValue("--muted").trim() || "#6b7280",
+      accentSoft: s.getPropertyValue("--accent-soft").trim() || "#ccfbf1",
+      text: s.getPropertyValue("--text").trim() || "#111827",
+    };
   }, []);
 
   /* Resize canvas to match container */
@@ -643,13 +681,14 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
       canvas.style.height = `${h}px`;
       const ctx = canvas.getContext("2d");
       if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      readCssColors();
     };
 
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, []);
+  }, [readCssColors]);
 
   /* Animation loop */
   useEffect(() => {
@@ -664,245 +703,325 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
       const dpr = window.devicePixelRatio || 1;
       const cw = canvas.width / dpr;
       const ch = canvas.height / dpr;
+      const colors = cssColorsRef.current;
 
+      /* 1. Clear — matches page background via CSS var */
       ctx.clearRect(0, 0, cw, ch);
+      ctx.fillStyle = colors.bg;
+      ctx.fillRect(0, 0, cw, ch);
 
-      const cols = 3;
-      const rows = 2;
-      const roomW = cw / cols;
-      const roomH = ch / rows;
-      const tileSize = roomW / 8;
+      const dotSize = Math.max(6, Math.min(8, cw / 100));
+      const roomZoneW = cw * 0.28;
+      const roomZoneH = ch * 0.28;
+      const labelFontSize = Math.max(9, Math.min(11, cw / 80));
 
-      const sprites: typeof spritesRef.current = [];
-      const agentPositions = new Map<string, { x: number; y: number }>();
-      const taskPositions = new Map<string, { x: number; y: number }>();
+      /* 2. Draw room zones — solid card base + colored tint on top */
+      for (const room of ROOM_DEFS) {
+        const pos = ROOM_POSITIONS[room.id];
+        if (!pos) continue;
+        const cx = pos.x * cw;
+        const cy = pos.y * ch;
+        const rx = cx - roomZoneW / 2;
+        const ry = cy - roomZoneH / 2;
 
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          const roomId = ROOM_LAYOUT[row][col];
-          const roomDef = roomById.get(roomId);
-          if (!roomDef) continue;
+        /* Solid card base so zones clearly sit above background */
+        ctx.save();
+        ctx.fillStyle = colors.card;
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, roomZoneW, roomZoneH, 12);
+        ctx.fill();
+        ctx.restore();
 
-          const rx = col * roomW;
-          const ry = row * roomH;
-          const colors = ROOM_COLORS[roomId] || { floor: "#222", label: "#aaa" };
+        /* Per-room color tint */
+        ctx.save();
+        ctx.fillStyle = ROOM_TINTS[room.id] || "rgba(0,0,0,0.03)";
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, roomZoneW, roomZoneH, 12);
+        ctx.fill();
+        ctx.restore();
 
-          /* 1. Room floor */
-          ctx.fillStyle = colors.floor;
-          ctx.fillRect(rx, ry, roomW, roomH);
+        /* Subtle border */
+        ctx.save();
+        ctx.strokeStyle = colors.border;
+        ctx.globalAlpha = 0.5;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, roomZoneW, roomZoneH, 12);
+        ctx.stroke();
+        ctx.restore();
 
-          /* 2. Tile grid */
-          ctx.strokeStyle = "rgba(255,255,255,0.04)";
-          ctx.lineWidth = 0.5;
-          for (let tx = rx + tileSize; tx < rx + roomW; tx += tileSize) {
-            ctx.beginPath(); ctx.moveTo(tx, ry); ctx.lineTo(tx, ry + roomH); ctx.stroke();
-          }
-          for (let ty = ry + tileSize; ty < ry + roomH; ty += tileSize) {
-            ctx.beginPath(); ctx.moveTo(rx, ty); ctx.lineTo(rx + roomW, ty); ctx.stroke();
-          }
+        /* Room label */
+        ctx.font = `600 ${labelFontSize}px ui-sans-serif, -apple-system, sans-serif`;
+        ctx.fillStyle = colors.muted;
+        ctx.textAlign = "center";
+        ctx.fillText(room.name.toUpperCase(), cx, ry + labelFontSize + 10);
+      }
 
-          /* Room border */
-          ctx.strokeStyle = "rgba(255,255,255,0.08)";
-          ctx.lineWidth = 1;
-          ctx.strokeRect(rx + 0.5, ry + 0.5, roomW - 1, roomH - 1);
+      /* 3. Draw lounge bar — horizontal strip across the middle, on top of rooms */
+      const loungeH = ch * 0.10;
+      const loungePad = cw * 0.03;
+      const loungeX = loungePad;
+      const loungeY = ch * 0.50 - loungeH / 2;
+      const loungeW = cw - loungePad * 2;
 
-          /* 3. Room label */
-          const labelText = roomDef.name.toUpperCase();
-          const labelFontSize = Math.max(9, Math.min(12, roomW / 14));
-          ctx.font = `bold ${labelFontSize}px monospace`;
-          const labelMetrics = ctx.measureText(labelText);
-          const labelPadX = 6;
-          const labelPadY = 3;
-          const labelX = rx + 6;
-          const labelY = ry + 6;
+      /* Card base */
+      ctx.save();
+      ctx.fillStyle = colors.card;
+      ctx.beginPath();
+      ctx.roundRect(loungeX, loungeY, loungeW, loungeH, 10);
+      ctx.fill();
+      ctx.restore();
 
-          ctx.fillStyle = colors.floor;
-          ctx.globalAlpha = 0.85;
-          ctx.fillRect(labelX - 2, labelY - 1, labelMetrics.width + labelPadX * 2, labelFontSize + labelPadY * 2);
-          ctx.globalAlpha = 1;
+      /* Accent tint */
+      ctx.save();
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = colors.accentSoft;
+      ctx.beginPath();
+      ctx.roundRect(loungeX, loungeY, loungeW, loungeH, 10);
+      ctx.fill();
+      ctx.restore();
 
-          ctx.fillStyle = colors.label;
-          ctx.fillText(labelText, labelX + labelPadX, labelY + labelFontSize + labelPadY - 2);
+      /* Border */
+      ctx.save();
+      ctx.strokeStyle = colors.border;
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(loungeX, loungeY, loungeW, loungeH, 10);
+      ctx.stroke();
+      ctx.restore();
 
-          /* 4. Agent sprites — left half of room */
-          const agents = agentsByRoom.get(roomId) || [];
-          const spriteW = Math.max(6, Math.min(10, roomW / 16));
-          const spriteBodyH = spriteW * 1.25;
-          const spriteHeadH = spriteW;
-          const nameFontSize = Math.max(7, Math.min(9, roomW / 20));
-          const spriteSlotH = spriteHeadH + spriteBodyH + nameFontSize * 2 + 8;
+      /* Coffee cup icon — left side */
+      const cupScale = Math.max(10, loungeH * 0.35);
+      const cupW = cupScale;
+      const cupH = cupScale * 0.75;
+      const cupX = loungeX + 14;
+      const cupY = loungeY + (loungeH - cupH) / 2;
+      ctx.save();
+      ctx.strokeStyle = colors.muted;
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.roundRect(cupX, cupY, cupW, cupH, 3);
+      ctx.stroke();
+      const handleR = cupH * 0.28;
+      ctx.beginPath();
+      ctx.arc(cupX + cupW + handleR * 0.4, cupY + cupH / 2, handleR, -Math.PI / 2, Math.PI / 2);
+      ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.5;
+      for (let si = 0; si < 3; si++) {
+        const sx = cupX + cupW * 0.2 + si * cupW * 0.3;
+        const steamH = cupH * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(sx, cupY - 2);
+        ctx.quadraticCurveTo(sx + 2.5, cupY - steamH * 0.5, sx - 1.5, cupY - steamH);
+        ctx.stroke();
+      }
+      ctx.restore();
 
-          const contentTop = ry + labelFontSize + labelPadY * 2 + 10;
-          const contentH = roomH - (contentTop - ry) - 6;
-          const agentAreaLeft = rx + roomW * 0.04;
-          const agentSpacingY = Math.min(spriteSlotH + 4, contentH / Math.max(agents.length, 1));
-          const agentBlockH = agents.length > 0 ? (agents.length - 1) * agentSpacingY + spriteSlotH : 0;
-          const agentAreaTop = contentTop + Math.max(0, (contentH - agentBlockH) / 2);
+      /* "LOUNGE" label — next to cup */
+      const loungeLabelX = cupX + cupW + handleR + 12;
+      ctx.font = `600 ${labelFontSize}px ui-sans-serif, -apple-system, sans-serif`;
+      ctx.fillStyle = colors.muted;
+      ctx.textAlign = "left";
+      ctx.fillText("LOUNGE", loungeLabelX, loungeY + loungeH / 2 + labelFontSize * 0.35);
 
-          agents.forEach((agent: any, i: number) => {
-            const online = isOnline(agent.heartbeat_at);
-            const color = ROLE_COLORS[agent.role] || "#6b7280";
-            const seed = hashCode(agent.agent_id);
-            const bob = online ? Math.sin(frame * 0.03 + seed) * 1.5 : 0;
+      /* 4. Compute targets + lerp positions for all agents */
+      const hits: typeof hitsRef.current = [];
+      const agentScreenPositions = new Map<string, { x: number; y: number }>();
 
-            const sx = agentAreaLeft;
-            const sy = agentAreaTop + i * agentSpacingY + bob;
-
-            ctx.globalAlpha = online ? 1 : 0.4;
-
-            /* Status indicator above head */
-            const isWorking = !!agent.current_task;
-            const indicatorY = sy - spriteW * 0.9;
-            const indicatorCx = sx + spriteW / 2;
-            if (isWorking) {
-              const gearR = spriteW * 0.35;
-              const rot = frame * 0.04 + seed;
-              ctx.save();
-              ctx.translate(indicatorCx, indicatorY);
-              ctx.rotate(rot);
-              ctx.fillStyle = "#facc15";
-              for (let n = 0; n < 4; n++) {
-                const a = (n * Math.PI) / 2;
-                ctx.fillRect(
-                  Math.cos(a) * gearR - gearR * 0.25,
-                  Math.sin(a) * gearR - gearR * 0.25,
-                  gearR * 0.5, gearR * 0.5,
-                );
-              }
-              ctx.beginPath();
-              ctx.arc(0, 0, gearR * 0.6, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(0, 0, gearR * 0.25, 0, Math.PI * 2);
-              ctx.fillStyle = ROOM_COLORS[roomId]?.floor || "#222";
-              ctx.fill();
-              ctx.restore();
-            } else if (online) {
-              const zAlpha = 0.3 + Math.sin(frame * 0.025 + seed) * 0.15;
-              ctx.globalAlpha = zAlpha;
-              ctx.font = `bold ${Math.max(6, spriteW * 0.55)}px monospace`;
-              ctx.fillStyle = "#94a3b8";
-              const zFloat = Math.sin(frame * 0.02 + seed) * 2;
-              ctx.fillText("z", indicatorCx - spriteW * 0.15, indicatorY + zFloat);
-              ctx.fillText("z", indicatorCx + spriteW * 0.25, indicatorY - spriteW * 0.3 + zFloat * 0.7);
-              ctx.globalAlpha = online ? 1 : 0.4;
-            }
-
-            /* Head */
-            ctx.fillStyle = lightenColor(color, 40);
-            ctx.fillRect(sx, sy, spriteW, spriteHeadH);
-            /* Body */
-            ctx.fillStyle = color;
-            ctx.fillRect(sx, sy + spriteHeadH, spriteW, spriteBodyH);
-
-            /* Name */
-            ctx.font = `${nameFontSize}px monospace`;
-            ctx.fillStyle = "rgba(255,255,255,0.75)";
-            const name = (agent.display_name || "agent").length > 10
-              ? agent.display_name.slice(0, 9) + "\u2026"
-              : (agent.display_name || "agent");
-            ctx.fillText(name, sx + spriteW + 4, sy + spriteHeadH + 1);
-
-            /* Status text */
-            const taskType = agent.current_task?.task_type;
-            const statusText = taskType ? taskType.replace(/_/g, " ").slice(0, 10) : "idle";
-            ctx.fillStyle = "rgba(255,255,255,0.4)";
-            ctx.font = `${Math.max(6, nameFontSize - 2)}px monospace`;
-            ctx.fillText(statusText, sx + spriteW + 4, sy + spriteHeadH + nameFontSize + 2);
-
-            ctx.globalAlpha = 1;
-
-            const hitW = spriteW + 4 + nameFontSize * 6;
-            sprites.push({ x: sx, y: sy - spriteW, w: hitW, h: spriteSlotH + spriteW, kind: "agent", data: agent });
-            /* Track agent right-center for connection lines */
-            agentPositions.set(agent.agent_id, { x: sx + hitW, y: sy + (spriteHeadH + spriteBodyH) / 2 });
-          });
-
-          /* 5. Task items — right half of room */
-          const roomTasks = tasksByRoom.get(roomId) || [];
-          const taskFontSize = Math.max(6, Math.min(8, roomW / 22));
-          const taskPillH = taskFontSize + 6;
-          const taskPillMaxW = roomW * 0.44;
-          const taskAreaLeft = rx + roomW * 0.54;
-          const maxVisible = Math.min(roomTasks.length, Math.floor(contentH / (taskPillH + 3)));
-          const taskBlockH = maxVisible > 0 ? maxVisible * (taskPillH + 3) - 3 : 0;
-          const taskAreaTop = contentTop + Math.max(0, (contentH - taskBlockH) / 2);
-
-          for (let ti = 0; ti < maxVisible; ti++) {
-            const task = roomTasks[ti];
-            const statusColor = TASK_STATUS_BORDER[task.status] || "#555";
-            const tx = taskAreaLeft;
-            const ty = taskAreaTop + ti * (taskPillH + 3);
-
-            /* Pill background */
-            ctx.fillStyle = "rgba(255,255,255,0.06)";
-            ctx.beginPath();
-            ctx.roundRect(tx, ty, taskPillMaxW, taskPillH, 3);
-            ctx.fill();
-
-            /* Status stripe on left */
-            ctx.fillStyle = statusColor;
-            ctx.fillRect(tx, ty + 1, 2.5, taskPillH - 2);
-
-            /* Task title */
-            ctx.font = `${taskFontSize}px monospace`;
-            ctx.fillStyle = "rgba(255,255,255,0.6)";
-            const titleMaxChars = Math.floor(taskPillMaxW / (taskFontSize * 0.6)) - 2;
-            const title = task.title.length > titleMaxChars
-              ? task.title.slice(0, titleMaxChars - 1) + "\u2026"
-              : task.title;
-            ctx.fillText(title, tx + 6, ty + taskFontSize + 2);
-
-            sprites.push({ x: tx, y: ty, w: taskPillMaxW, h: taskPillH, kind: "task", data: task });
-
-            /* Track task pill left-center for connection lines */
-            if (task.assigned_to) {
-              taskPositions.set(task.assigned_to, { x: tx, y: ty + taskPillH / 2 });
-            }
-          }
-
-          /* Overflow count */
-          if (roomTasks.length > maxVisible) {
-            ctx.font = `${taskFontSize}px monospace`;
-            ctx.fillStyle = "rgba(255,255,255,0.35)";
-            ctx.fillText(`+${roomTasks.length - maxVisible} more`, taskAreaLeft, taskAreaTop + maxVisible * (taskPillH + 3) + taskFontSize);
-          }
+      /* Pre-compute idle agents list + index map for even spacing */
+      const idleAgents: any[] = [];
+      const idleAgentIndex = new Map<string, number>();
+      const roomAgentIndex = new Map<string, number>();
+      for (const member of members) {
+        if (!isOnline(member.heartbeat_at) || isIdle(member)) {
+          idleAgentIndex.set(member.agent_id, idleAgents.length);
+          idleAgents.push(member);
         }
       }
 
-      /* 6. Connection lines: agent → their task */
-      for (const [agentId, aPos] of agentPositions) {
-        const tPos = taskPositions.get(agentId);
-        if (!tPos) continue;
-
-        ctx.save();
-        ctx.strokeStyle = "rgba(255,255,255,0.12)";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath();
-        ctx.moveTo(aPos.x, aPos.y);
-        /* Horizontal curve from agent → task */
-        const cpX = (aPos.x + tPos.x) / 2;
-        ctx.quadraticCurveTo(cpX, aPos.y, tPos.x, tPos.y);
-        ctx.stroke();
-
-        /* Small dot at the task end */
-        ctx.fillStyle = "rgba(255,255,255,0.25)";
-        ctx.beginPath();
-        ctx.arc(tPos.x, tPos.y, 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+      /* Pre-compute agent→room map and active agent count per room */
+      const memberRoomMap = new Map<string, string>();
+      const activeAgentsPerRoom = new Map<string, number>();
+      for (const [roomId, agents] of agentsByRoom) {
+        for (const a of agents) memberRoomMap.set(a.agent_id, roomId);
+        activeAgentsPerRoom.set(roomId, agents.filter(
+          (a: any) => isOnline(a.heartbeat_at) && !isIdle(a)
+        ).length);
       }
 
-      spritesRef.current = sprites;
+      for (const member of members) {
+        const online = isOnline(member.heartbeat_at);
+        const idle = isIdle(member);
+        const seed = hashCode(member.agent_id);
+
+        /* Determine target position */
+        let targetX: number;
+        let targetY: number;
+
+        if (!online || idle) {
+          /* Lounge bar — evenly spaced along the strip */
+          const idleIdx = idleAgentIndex.get(member.agent_id) ?? 0;
+          const total = idleAgents.length;
+          const clusterGap = dotSize * 3.5;
+          const clusterW = (total - 1) * clusterGap;
+          const centerX = loungeX + loungeW / 2;
+          targetX = centerX - clusterW / 2 + idleIdx * clusterGap;
+          targetY = loungeY + loungeH / 2;
+        } else {
+          const assignedRoom = memberRoomMap.get(member.agent_id) ?? "office";
+          const roomPos = ROOM_POSITIONS[assignedRoom] || ROOM_POSITIONS.office;
+          /* Evenly space agents within room */
+          const roomKey = assignedRoom;
+          const idx = roomAgentIndex.get(roomKey) ?? 0;
+          roomAgentIndex.set(roomKey, idx + 1);
+          const totalInRoom = activeAgentsPerRoom.get(assignedRoom) ?? 1;
+          const cols = Math.ceil(Math.sqrt(totalInRoom));
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          const spacingX = roomZoneW * 0.14;
+          const spacingY = roomZoneH * 0.18;
+          const blockW = (cols - 1) * spacingX;
+          const rows = Math.ceil(totalInRoom / cols);
+          const blockH = (rows - 1) * spacingY;
+          targetX = roomPos.x * cw - blockW / 2 + col * spacingX;
+          targetY = roomPos.y * ch - blockH / 2 + row * spacingY + labelFontSize + 6;
+        }
+
+        /* Lerp */
+        const prev = agentAnimPositions.current.get(member.agent_id);
+        let ax: number;
+        let ay: number;
+        if (prev) {
+          ax = prev.x + (targetX - prev.x) * 0.04;
+          ay = prev.y + (targetY - prev.y) * 0.04;
+        } else {
+          ax = targetX;
+          ay = targetY;
+        }
+        agentAnimPositions.current.set(member.agent_id, { x: ax, y: ay });
+
+        /* Bobbing for online agents */
+        const bob = online ? Math.sin(frame * 0.03 + seed) * 2 : 0;
+        const drawX = ax;
+        const drawY = ay + bob;
+
+        agentScreenPositions.set(member.agent_id, { x: drawX, y: drawY });
+      }
+
+      /* 5. Draw connection lines between agents on the same task */
+      const taskAssignees = new Map<string, string[]>();
+      for (const [, roomTasks] of tasksByRoom) {
+        for (const task of roomTasks) {
+          if (!task.assigned_to) continue;
+          if (!taskAssignees.has(task.id)) taskAssignees.set(task.id, []);
+          const list = taskAssignees.get(task.id)!;
+          if (!list.includes(task.assigned_to)) list.push(task.assigned_to);
+        }
+      }
+      /* Also check if any agent is critiquing/voting on another's task */
+      for (const member of members) {
+        if (member.current_task?.id) {
+          const tid = member.current_task.id;
+          if (!taskAssignees.has(tid)) taskAssignees.set(tid, []);
+          const list = taskAssignees.get(tid)!;
+          if (!list.includes(member.agent_id)) list.push(member.agent_id);
+        }
+      }
+
+      ctx.save();
+      for (const [, agentIds] of taskAssignees) {
+        if (agentIds.length < 2) continue;
+        for (let i = 0; i < agentIds.length; i++) {
+          for (let j = i + 1; j < agentIds.length; j++) {
+            const p1 = agentScreenPositions.get(agentIds[i]);
+            const p2 = agentScreenPositions.get(agentIds[j]);
+            if (!p1 || !p2) continue;
+
+            ctx.strokeStyle = colors.border;
+            ctx.globalAlpha = 0.6;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.lineDashOffset = -frame * 0.3;
+
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+            const offsetY = -Math.abs(p1.x - p2.x) * 0.15;
+
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.quadraticCurveTo(midX, midY + offsetY, p2.x, p2.y);
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.restore();
+
+      /* 6. Draw agent dots */
+      for (let mi = 0; mi < members.length; mi++) {
+        const member = members[mi];
+        const online = isOnline(member.heartbeat_at);
+        const color = ROLE_COLORS[member.role] || "#6b7280";
+        const pos = agentScreenPositions.get(member.agent_id);
+        if (!pos) continue;
+
+        const isWorking = !!member.current_task;
+
+        /* Pulsing glow for working agents */
+        if (isWorking && online) {
+          const pulse = 0.15 + Math.sin(frame * 0.06) * 0.1;
+          ctx.save();
+          ctx.globalAlpha = pulse;
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, dotSize * 2.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        /* Agent dot — full color always */
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, dotSize, 0, Math.PI * 2);
+        ctx.fill();
+
+        /* Name label — alternate above/below to avoid overlap */
+        const name = (member.display_name || "agent").length > 12
+          ? (member.display_name || "agent").slice(0, 11) + "\u2026"
+          : (member.display_name || "agent");
+        const nameFontSize = Math.max(8, Math.min(10, cw / 85));
+        const labelAbove = mi % 2 === 0;
+        const labelY = labelAbove
+          ? pos.y - dotSize - 4
+          : pos.y + dotSize + nameFontSize + 2;
+        ctx.save();
+        ctx.globalAlpha = online ? 0.9 : 0.35;
+        ctx.font = `500 ${nameFontSize}px ui-sans-serif, -apple-system, sans-serif`;
+        ctx.fillStyle = colors.muted;
+        ctx.textAlign = "center";
+        ctx.fillText(name, pos.x, labelY);
+        ctx.restore();
+
+        /* Hit-test region */
+        hits.push({ x: pos.x, y: pos.y, r: dotSize + 6, data: member });
+      }
+
+      ctx.textAlign = "start";
+      hitsRef.current = hits;
       animRef.current = requestAnimationFrame(draw);
     };
 
+    /* Re-read CSS colors once before starting (handles theme changes) */
+    readCssColors();
     animRef.current = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(animRef.current);
-  }, [agentsByRoom, tasksByRoom, roomById, isOnline]);
+    const mo = new MutationObserver(() => readCssColors());
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => { cancelAnimationFrame(animRef.current); mo.disconnect(); };
+  }, [agentsByRoom, tasksByRoom, members, isOnline, isIdle, readCssColors]);
 
-  /* Tooltip on hover */
+  /* Tooltip on hover — circle hit test */
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     const tooltip = tooltipRef.current;
@@ -914,25 +1033,21 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
 
-    let hit: typeof spritesRef.current[number] | null = null;
-    for (const s of spritesRef.current) {
-      if (mx >= s.x && mx <= s.x + s.w && my >= s.y && my <= s.y + s.h) {
+    let hit: typeof hitsRef.current[number] | null = null;
+    for (const s of hitsRef.current) {
+      const dx = mx - s.x;
+      const dy = my - s.y;
+      if (dx * dx + dy * dy <= s.r * s.r) {
         hit = s;
         break;
       }
     }
 
     if (hit) {
-      if (hit.kind === "agent") {
-        const a = hit.data;
-        const taskTitle = a.current_task?.title;
-        tooltip.textContent = `${a.display_name} (${a.role})${taskTitle ? `\nTask: ${taskTitle}` : "\nIdle"}`;
-      } else {
-        const t = hit.data;
-        const status = t.status.replace(/_/g, " ");
-        const type = t.task_type.replace(/_/g, " ");
-        tooltip.textContent = `${t.title}\n${type} \u2022 ${status}${t.assigned_to ? "" : "\nUnassigned"}`;
-      }
+      const a = hit.data;
+      const taskTitle = a.current_task?.title;
+      const role = a.role === "pi" ? "Principal Investigator" : (a.role || "").replace(/_/g, " ");
+      tooltip.textContent = `${a.display_name} (${role})${taskTitle ? `\nTask: ${taskTitle}` : "\nIdle"}`;
       tooltip.className = "lab-floor-tooltip visible";
       const wrapRect = wrapRef.current!.getBoundingClientRect();
       tooltip.style.left = `${e.clientX - wrapRect.left + 12}px`;
@@ -958,16 +1073,6 @@ function LabFloorCanvas({ agentsByRoom, tasksByRoom, members }: LabFloorCanvasPr
       <div ref={tooltipRef} className="lab-floor-tooltip" />
     </div>
   );
-}
-
-/* ── Drawing helpers ── */
-
-function lightenColor(hex: string, amount: number): string {
-  const n = parseInt(hex.replace("#", ""), 16);
-  const r = Math.min(255, ((n >> 16) & 0xff) + amount);
-  const g = Math.min(255, ((n >> 8) & 0xff) + amount);
-  const b = Math.min(255, (n & 0xff) + amount);
-  return `rgb(${r},${g},${b})`;
 }
 
 
@@ -1039,7 +1144,7 @@ function AgentsTab({ slug }: { slug: string }) {
           {members.map((member) => (
             <button key={member.agent_id} className="card" style={{ textAlign: "left", cursor: "pointer", borderColor: selectedAgentId === member.agent_id ? "var(--accent)" : "var(--border)" }} onClick={() => setSelectedAgentId(member.agent_id)}>
               <strong style={{ display: "flex", alignItems: "center", gap: 6 }}><Bot size={14} /> {member.display_name}</strong>
-              <p className="muted" style={{ marginBottom: 0 }}>role: {member.role}</p>
+              <p className="muted" style={{ marginBottom: 0, textTransform: "capitalize" }}>{member.role === "pi" ? "Principal Investigator" : member.role.replace(/_/g, " ")}</p>
             </button>
           ))}
         </div>
@@ -1339,8 +1444,8 @@ function DocsTab({ slug }: { slug: string }) {
   return (
     <div className="grid" style={{ gridTemplateColumns: "280px 1fr", gap: 12 }}>
       <aside className="card" style={{ maxHeight: "70vh", overflow: "auto" }}>
-        <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><FileText size={18} /> Docs</h3>
-        <h4 style={{ margin: "8px 0 6px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)" }}>Markdown Docs</h4>
+        <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}><FileText size={18} /> Documentation</h3>
+        <h4 style={{ margin: "8px 0 6px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)" }}>Markdown Documentation</h4>
         <div className="grid">
           {docs.map((doc) => (
             <button key={doc.id} className="card" style={{ textAlign: "left", padding: 10, borderColor: selected?.kind === "doc" && selected.id === doc.id ? "#0f766e" : "#e5e7eb" }} onClick={() => setSelected({ kind: "doc", id: doc.id })}>
@@ -1349,7 +1454,7 @@ function DocsTab({ slug }: { slug: string }) {
             </button>
           ))}
         </div>
-        {docs.length === 0 && <p className="muted" style={{ fontSize: 13 }}>No markdown docs yet.</p>}
+        {docs.length === 0 && <p className="muted" style={{ fontSize: 13 }}>No markdown documentation yet.</p>}
 
         <h4 style={{ margin: "14px 0 6px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)" }}>Analysis Artifacts</h4>
         {artifactsError && <p className="muted" style={{ fontSize: 13 }}>{artifactsError}</p>}
@@ -1402,7 +1507,7 @@ function DocsTab({ slug }: { slug: string }) {
             )}
             <p><strong>Updated:</strong> {new Date(selectedArtifact.updated_at).toLocaleString()}</p>
           </article>
-        ) : <p className="muted">No docs or artifacts yet.</p>}
+        ) : <p className="muted">No documentation or artifacts yet.</p>}
       </section>
     </div>
   );
