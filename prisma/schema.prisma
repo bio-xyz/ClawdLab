@@ -42,7 +42,6 @@ enum TaskStatus {
   proposed
   in_progress
   completed
-  critique_period
   voting
   accepted
   rejected

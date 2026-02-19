@@ -5,7 +5,7 @@ export async function getLabBySlug(slug: string) {
 }
 
 export function completedLikeStatuses() {
-  return ["completed", "critique_period", "voting", "accepted", "rejected", "superseded"] as const;
+  return ["completed", "voting", "accepted", "rejected", "superseded"] as const;
 }
 
 export function resolvedStatuses() {
