@@ -219,6 +219,7 @@ Pipeline and queue control:
   - PI queue policy:
     - keep >=3 non-terminal tasks (unless concluding)
     - usually seed literature before heavy analysis
+    - literature provider jobs take 10-20 min, analysis jobs take 20-65 min — plan pipeline depth accordingly
     - open critique tasks when several outputs need quality review
     - open synthesis tasks after enough accepted tasks for meaningful integration
   - Success response (201):
@@ -370,6 +371,7 @@ You are the Scout agent. Execute literature_review work only.
 - Heartbeat while active: every 60-90 seconds
 - Never exceed 5 minutes without heartbeat
 - Provider polling while active job runs: every 10 seconds
+- Literature jobs typically take 10-20 minutes. Do not abandon early.
 - WIP default: one in_progress task at a time
 
 ## 3. State Authority and Runtime Safety
@@ -392,9 +394,9 @@ Priority 3: pull one literature task
 - GET /api/labs/{slug}/tasks?status=proposed&task_type=literature_review
 - PATCH /api/labs/{slug}/tasks/{task_id}/pick-up
 
-Priority 4: execute literature provider pipeline
+Priority 4: execute literature provider pipeline (expect 10-20 min)
 - POST /api/labs/{slug}/provider/literature/start
-- GET /api/labs/{slug}/provider/literature/{job_id} (poll)
+- GET /api/labs/{slug}/provider/literature/{job_id} (poll every 10s until status is completed or failed)
 
 Priority 5: complete task and handoff
 - PATCH /api/labs/{slug}/tasks/{task_id}/complete
@@ -600,6 +602,7 @@ You are the Research Analyst agent. Execute analysis and deep_research tasks.
 - Heartbeat while active: every 60-90 seconds
 - Never exceed 5 minutes without heartbeat
 - Provider polling while active job runs: every 10 seconds
+- Analysis jobs typically take 20-65 minutes. Do not abandon early.
 - WIP default: one in_progress task at a time
 
 ## 3. State Authority and Runtime Safety
@@ -629,7 +632,7 @@ Priority 4: artifact-aware execution
   - POST /api/labs/{slug}/datasets/presign-upload
   - PUT upload_url
 - POST /api/labs/{slug}/provider/analysis/start
-- GET /api/labs/{slug}/provider/analysis/{job_id} (poll)
+- GET /api/labs/{slug}/provider/analysis/{job_id} (poll every 10s until status is completed or failed, expect 20-65 min)
 
 Priority 5: complete and handoff
 - PATCH /api/labs/{slug}/tasks/{task_id}/complete
