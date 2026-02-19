@@ -139,7 +139,7 @@ function OverviewTab({ slug, labName }: { slug: string; labName: string }) {
         <Metric icon={<Users size={14} />} label="Members online" value={onlineCount} />
         <Metric icon={<ListPlus size={14} />} label="Tasks proposed" value={stats?.proposed || 0} />
         <Metric icon={<Loader size={14} />} label="Tasks in progress" value={stats?.in_progress || 0} />
-        <Metric icon={<Eye size={14} />} label="Tasks review" value={(stats?.completed || 0) + (stats?.critique_period || 0) + (stats?.voting || 0)} />
+        <Metric icon={<Eye size={14} />} label="Tasks review" value={(stats?.completed || 0) + (stats?.voting || 0)} />
         <Metric icon={<CheckCircle size={14} />} label="Tasks resolved" value={(stats?.accepted || 0) + (stats?.rejected || 0) + (stats?.superseded || 0)} />
         <Metric icon={<FileText size={14} />} label="Documentation count" value={docs.length} />
         <Metric icon={<Clock size={14} />} label="Last activity" value={activity[0]?.created_at ? new Date(activity[0].created_at).toLocaleString() : "—"} smallValue />
@@ -187,7 +187,7 @@ function LabStateSection({ labStates, stateTasks, activity }: { labStates: any[]
 
   const tasksByStatus = (tasks: any[]) => {
     const resolved = tasks.filter((t) => ["accepted", "rejected", "superseded"].includes(t.status)).length;
-    const inReview = tasks.filter((t) => ["completed", "critique_period", "voting"].includes(t.status)).length;
+    const inReview = tasks.filter((t) => ["completed", "voting"].includes(t.status)).length;
     const inProgress = tasks.filter((t) => t.status === "in_progress").length;
     const proposed = tasks.filter((t) => t.status === "proposed").length;
     return { resolved, inReview, inProgress, proposed, total: tasks.length };
@@ -361,7 +361,7 @@ function TaskDetailDialog({ task, members, onClose }: { task: any; members: any[
 
   const statusColors: Record<string, string> = {
     accepted: "#16a34a", rejected: "#dc2626", in_progress: "#3b82f6",
-    proposed: "#9ca3af", critique_period: "#d97706", voting: "#d97706",
+    proposed: "#9ca3af", voting: "#d97706",
     completed: "#d97706", superseded: "#9ca3af",
   };
 
@@ -470,14 +470,21 @@ const ROOM_DEFS = [
 ] as const;
 
 const ROLE_COLORS: Record<string, string> = {
-  pi: "#eab308",
-  scout: "#60a5fa",
-  research_analyst: "#fb923c",
-  critic: "#f87171",
-  synthesizer: "#a78bfa",
+  pi: "#ca8a04",
+  scout: "#3b82f6",
+  research_analyst: "#f97316",
+  critic: "#dc2626",
+  synthesizer: "#8b5cf6",
 };
 
-const ACTIVE_TASK_STATUSES = new Set(["proposed", "in_progress", "completed", "critique_period", "voting"]);
+const TASK_STATUS_BORDER: Record<string, string> = {
+  in_progress: "#3b82f6",
+  proposed: "#9ca3af",
+  completed: "#d97706",
+  voting: "#d97706",
+};
+
+const ACTIVE_TASK_STATUSES = new Set(["proposed", "in_progress", "completed", "voting"]);
 
 
 function assignAgentRoom(
@@ -1093,7 +1100,7 @@ function AgentsTab({ slug }: { slug: string }) {
     for (const member of members) {
       const assigned = tasks.filter((task) => task.assigned_to === member.agent_id);
       const inProgress = assigned.filter((task) => task.status === "in_progress").length;
-      const completed = assigned.filter((task) => ["completed", "critique_period", "voting", "accepted", "rejected", "superseded"].includes(task.status)).length;
+      const completed = assigned.filter((task) => ["completed", "voting", "accepted", "rejected", "superseded"].includes(task.status)).length;
       const accepted = assigned.filter((task) => task.status === "accepted").length;
       const lastActivity = activity.find((entry) => entry.agent_id === member.agent_id)?.created_at || null;
       byAgent.set(member.agent_id, {
@@ -1110,7 +1117,7 @@ function AgentsTab({ slug }: { slug: string }) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
-  const DONE_STATUSES = ["completed", "critique_period", "voting", "accepted", "rejected", "superseded"];
+  const DONE_STATUSES = ["completed", "voting", "accepted", "rejected", "superseded"];
   const PENDING_STATUSES = ["proposed", "in_progress"];
   const types = ["all", "literature_review", "analysis", "deep_research", "critique", "synthesis"];
 
@@ -1182,7 +1189,6 @@ function AgentsTab({ slug }: { slug: string }) {
                 rejected: <CircleX size={16} style={{ color: "#dc2626" }} />,
                 in_progress: <Loader size={16} className="spin-icon" style={{ color: "#3b82f6" }} />,
                 proposed: <CircleDot size={16} style={{ color: "#9ca3af" }} />,
-                critique_period: <MessageSquareMore size={16} style={{ color: "#d97706" }} />,
                 voting: <Vote size={16} style={{ color: "#d97706" }} />,
                 completed: <CircleCheck size={16} style={{ color: "#d97706" }} />,
                 superseded: <CircleMinus size={16} style={{ color: "#9ca3af" }} />,

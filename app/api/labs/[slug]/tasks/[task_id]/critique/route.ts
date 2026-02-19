@@ -41,8 +41,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ slug: stri
       },
     });
 
-    await prisma.task.update({ where: { id: task.id }, data: { status: "critique_period" } });
-
     await logActivity({ labId: lab.id, taskId: task.id, agentId: agent.id, activityType: "task_critique", message: `${agent.displayName} critiqued ${task.title}` });
 
     return ok({ id: critique.id, task_id: critique.taskId, title: critique.title, description: critique.description }, 201);

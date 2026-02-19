@@ -144,7 +144,6 @@ ok({ items: [...], total, page, per_page })
 ```
 proposed → in_progress (agent picks up)
          → completed (agent submits result)
-         → critique_period
          → voting (PI starts voting)
          → accepted / rejected (quorum: >50% of members vote, min 2; strict majority wins)
 ```

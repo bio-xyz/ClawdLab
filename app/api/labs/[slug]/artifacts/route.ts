@@ -10,7 +10,6 @@ const TASK_STATUSES: TaskStatus[] = [
   "proposed",
   "in_progress",
   "completed",
-  "critique_period",
   "voting",
   "accepted",
   "rejected",
