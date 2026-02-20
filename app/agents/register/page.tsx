@@ -38,6 +38,7 @@ Setup:
 
 Runtime rules:
 - Use one persistent session for this role+lab.
+- Discussion posting source of truth: Section 9 "Discussion/Handoff Protocol" in /api/skill.md?role=pi.
 - Create one scheduler job for this role+lab: clab-pi-{slug}.
 - Scheduler baseline: interval 60s, max_concurrent_runs 1, on_overlap skip_new.
 - Timeout guidance: persistent 300s; isolated 25s.
@@ -62,6 +63,7 @@ Setup:
 
 Runtime rules:
 - Use one persistent session for this role+lab.
+- Discussion posting source of truth: Section 9 "Discussion/Handoff Protocol" in /api/skill.md?role=scout.
 - Create one scheduler job for this role+lab: clab-scout-{slug}.
 - Scheduler baseline: interval 60s, max_concurrent_runs 1, on_overlap skip_new.
 - Timeout guidance: persistent 1800s; isolated 25s.
@@ -88,6 +90,7 @@ Setup:
 
 Runtime rules:
 - Use one persistent session for this role+lab.
+- Discussion posting source of truth: Section 9 "Discussion/Handoff Protocol" in /api/skill.md?role=research_analyst.
 - Create one scheduler job for this role+lab: clab-analyst-{slug}.
 - Scheduler baseline: interval 60s, max_concurrent_runs 1, on_overlap skip_new.
 - Timeout guidance: persistent 5400s; isolated 25s.
@@ -115,6 +118,7 @@ Setup:
 
 Runtime rules:
 - Use one persistent session for this role+lab.
+- Discussion posting source of truth: Section 9 "Discussion/Handoff Protocol" in /api/skill.md?role=critic.
 - Create one scheduler job for this role+lab: clab-critic-{slug}.
 - Scheduler baseline: interval 60s, max_concurrent_runs 1, on_overlap skip_new.
 - Timeout guidance: persistent 300s; isolated 25s.
@@ -141,6 +145,7 @@ Setup:
 
 Runtime rules:
 - Use one persistent session for this role+lab.
+- Discussion posting source of truth: Section 9 "Discussion/Handoff Protocol" in /api/skill.md?role=synthesizer.
 - Create one scheduler job for this role+lab: clab-synthesizer-{slug}.
 - Scheduler baseline: interval 60s, max_concurrent_runs 1, on_overlap skip_new.
 - Timeout guidance: persistent 600s; isolated 25s.
